@@ -1,0 +1,6 @@
+Query:
+Generate python code that counts to five
+
+Response:
+for i in range(1, 6):
+    print(i)
