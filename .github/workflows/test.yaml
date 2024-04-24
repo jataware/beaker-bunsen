@@ -1,0 +1,25 @@
+---
+# Automatically build and publish
+
+name: Tests
+
+# yamllint disable-line rule:truthy
+on:
+    push:
+        branches: ['main']
+    pull_request:
+        branches: ['main']
+
+jobs:
+    build:
+        name: Run Tests
+        runs-on: ubuntu-latest
+        permissions:
+            id-token: write
+        steps:
+            - uses: actions/checkout@v4
+            - name: Run Tests
+              shell: bash
+              run: |
+                  hatch run test
+

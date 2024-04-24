@@ -1,0 +1,6 @@
+corpus: !!set
+  null: null
+store:
+  default_embedding_function: null
+  default_partition: default
+  settings: null
