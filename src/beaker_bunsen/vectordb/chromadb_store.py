@@ -59,7 +59,7 @@ class BaseChromaDBStore(VectorStore):
             Record(
                 id=result.get('ids', None),
                 embedding=result.get('embeddings', None),
-                document=result.get('documents', None),
+                content=result.get('documents', None),
                 uri=result.get('uris', None),
                 image=result.get('datas', None),
                 metadata=result.get('metadatas', None),
@@ -104,7 +104,7 @@ class BaseChromaDBStore(VectorStore):
             ids=[record.id],
             embeddings=record.embedding and [record.embedding] or None,
             metadatas=record.metadata and [record.metadata,] or None,
-            documents=record.document and [record.document,] or None,
+            documents=record.content and [record.content,] or None,
             images=record.image and [record.image,] or None,
             uris=record.uri and [record.uri] or None,
         )
@@ -120,7 +120,7 @@ class BaseChromaDBStore(VectorStore):
             "id": [],
             "embedding": [],
             "metadata": [],
-            "document": [],
+            "content": [],
             "image": [],
             "uri": [],
         }
@@ -141,7 +141,7 @@ class BaseChromaDBStore(VectorStore):
             ids = data_cols["id"],
             embeddings = data_cols["embedding"] or None,
             metadatas = data_cols["metadata"] or None,
-            documents = data_cols["document"] or None,
+            documents = data_cols["content"] or None,
             images = data_cols["image"] or None,
             uris = data_cols["uri"] or None,
         )

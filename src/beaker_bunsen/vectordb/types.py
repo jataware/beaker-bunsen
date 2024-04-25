@@ -8,7 +8,7 @@ from typing import Any, Union, Callable, Sequence, TypedDict, Optional
 # Define types
 RecordID = Union[str, int]
 
-Document = str
+RecordContent = str
 
 NDImage = NDArray[Union[np.uint, np.int_, np.float_]]
 RawImage = Union[Sequence[int], Sequence[float]]
@@ -21,7 +21,7 @@ Embedding = Union[Sequence[float], Sequence[int], np.ndarray]
 class Record:
     id: RecordID
     embedding: Embedding|None = None
-    document: Document|None = None
+    content: RecordContent|None = None
     image: Image|None = None
     uri: str|None = None
     metadata: Metadata|None = None

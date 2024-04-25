@@ -1,32 +1,5 @@
-# -*- coding: utf-8 -*-
-import re
-import os
-
-
-def count_words(source: str):
-    """Count the number of words in a string. A word is denoted by whitespace."""
-    if not isinstance(source, (str, bytes)):
-        raise ValueError("Not a string")
-    return len(source.split())
-
-
-def extract_json(text):
-    pattern = r'```json'
-    match = re.search(pattern, text)
-    if match:
-        json_starting_index = match.start()
-    else:
-        json_starting_index = -1
-    text=text[json_starting_index:]
-
-    pattern = r'```(?=(\s|$))'
-
-    matches = list(re.finditer(pattern, text))
-    indexes = [match.start() for match in matches]
-    text=text[:indexes[-1]+3]
-    return text
-
-
+# This splitting code was "borrowed" from langchain (see https://github.com/langchain-ai/langchain/blob/master/libs/text-splitters/langchain_text_splitters/character.py)
+# But it doesn't really fit with the rest of the code, so we might want to replace it in the future.
 """**Text Splitters** are classes for splitting text.
 
 
@@ -49,7 +22,7 @@ Note: **MarkdownHeaderTextSplitter** and **HTMLHeaderTextSplitter do not derive 
 """  # noqa: E501
 
 import copy
-import logging
+import re
 from abc import ABC, abstractmethod
 from typing import (
     Any,
@@ -60,30 +33,7 @@ from typing import (
     TypeVar,
 )
 
-
-logger = logging.getLogger(__name__)
-
-TS = TypeVar("TS", bound="TextSplitter")
-
-
-def _make_spacy_pipeline_for_splitting(
-    pipeline: str, *, max_length: int = 1_000_000
-) -> Any:  # avoid importing spacy
-    try:
-        import spacy
-    except ImportError:
-        raise ImportError(
-            "Spacy is not installed, please install it with `pip install spacy`."
-        )
-    if pipeline == "sentencizer":
-        from spacy.lang.en import English
-
-        sentencizer = English()
-        sentencizer.add_pipe("sentencizer")
-    else:
-        sentencizer = spacy.load(pipeline, exclude=["ner", "tagger"])
-        sentencizer.max_length = max_length
-    return sentencizer
+from .. import logger
 
 
 def _split_text_with_regex(
@@ -286,47 +236,59 @@ class RecursiveCharacterTextSplitter(TextSplitter):
     def split_text(self, text: str) -> List[str]:
         return self._split_text(text, self._separators)
 
-    # @classmethod
-    # def from_language(
-    #     cls, language: Language, **kwargs: Any
-    # ) -> RecursiveCharacterTextSplitter:
-    #     separators = cls.get_separators_for_language(language)
-    #     return cls(separators=separators, is_separator_regex=True, **kwargs)
+    @classmethod
+    def from_language(
+        cls, language: str, **kwargs: Any
+    ):
+        separators = cls.get_separators_for_language(language)
+        return cls(separators=separators, is_separator_regex=True, **kwargs)
 
-    # @staticmethod
-    # def get_separators_for_language(language: Language) -> List[str]:
-    #     elif language == Language.RST:
-    #         return [
-    #             # Split along section titles
-    #             "\n=+\n",
-    #             "\n-+\n",
-    #             "\n\\*+\n",
-    #             # Split along directive markers
-    #             "\n\n.. *\n\n",
-    #             # Split by the normal type of lines
-    #             "\n\n",
-    #             "\n",
-    #             " ",
-    #             "",
-    #         ]
-
-    #     elif language == Language.MARKDOWN:
-    #         return [
-    #             # First, try to split along Markdown headings (starting with level 2)
-    #             "\n#{1,6} ",
-    #             # Note the alternative syntax for headings (below) is not handled here
-    #             # Heading level 2
-    #             # ---------------
-    #             # End of code block
-    #             "```\n",
-    #             # Horizontal lines
-    #             "\n\\*\\*\\*+\n",
-    #             "\n---+\n",
-    #             "\n___+\n",
-    #             # Note that this splitter doesn't handle horizontal lines defined
-    #             # by *three or more* of ***, ---, or ___, but this is not handled
-    #             "\n\n",
-    #             "\n",
-    #             " ",
-    #             "",
-    #         ]
+    @staticmethod
+    def get_separators_for_language(extension: str) -> List[str]:
+        if extension == ".rst":
+            return [
+                # Split along section titles
+                "\n=+\n",
+                "\n-+\n",
+                "\n\\*+\n",
+                # Split along directive markers
+                "\n\n.. *\n\n",
+                # Split by the normal type of lines
+                "\n\n",
+                "\n",
+                " ",
+                "",
+            ]
+        elif extension == '.py':
+            return [
+                # First, try to split along class definitions
+                "\nclass ",
+                "\ndef ",
+                "\n\tdef ",
+                "\n    def ",
+                # Now split by the normal type of lines
+                "\n\n",
+                "\n",
+                " ",
+                "",
+            ]
+        elif extension == ".md":
+            return [
+                # First, try to split along Markdown headings (starting with level 2)
+                "\n#{1,6} ",
+                # Note the alternative syntax for headings (below) is not handled here
+                # Heading level 2
+                # ---------------
+                # End of code block
+                "```\n",
+                # Horizontal lines
+                "\n\\*\\*\\*+\n",
+                "\n---+\n",
+                "\n___+\n",
+                # Note that this splitter doesn't handle horizontal lines defined
+                # by *three or more* of ***, ---, or ___, but this is not handled
+                "\n\n",
+                "\n",
+                " ",
+                "",
+            ]

@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Iterator
 
 from .. import logger
 from ..loaders.base import BaseLoader
@@ -28,21 +28,21 @@ class BaseEmbedder:
         self.store = store
         self.embedding_function = embedding_function
 
-    def prepare_records_from_resource(self, loadable_resource: LoadableResource) -> Record:
+    def prepare_records_from_resource(self, resource: LoadableResource) -> Iterator[Record]:
         record = Record(
-            id=loadable_resource.id,
-            uri=loadable_resource.uri,
-            metadata=loadable_resource.metadata,
+            id=resource.id,
+            uri=resource.uri,
+            metadata=resource.metadata,
         )
-        if loadable_resource.content:
-            record.document = loadable_resource.content
-        elif loadable_resource.file_handle:
+        if resource.content:
+            record.content = resource.content
+        elif resource.file_handle:
             try:
-                loadable_resource.file_handle.seek(0)
+                resource.file_handle.seek(0)
             except IOError:
                 pass
-            record.document = loadable_resource.file_handle.read()
-        return record
+            record.content = resource.file_handle.read()
+        yield record
 
 
     def ingest(
@@ -57,21 +57,21 @@ class BaseEmbedder:
         batching_enabled = isinstance(batch_size, int) and batch_size >= 0
         batch = []
         for loadable in self.loader.discover(locations=locations, metadata=metadata):
-            record = self.prepare_records_from_resource(loadable_resource=loadable)
+            for record in self.prepare_records_from_resource(resource=loadable):
 
-            if embedding_function:
-                record.embedding = embedding_function(loadable)
-            elif self.embedding_function:
-                record.embedding = self.embedding_function(loadable)
+                if embedding_function:
+                    record.embedding = embedding_function(loadable)
+                elif self.embedding_function:
+                    record.embedding = self.embedding_function(loadable)
 
-            batch.append(record)
+                batch.append(record)
 
-            # If batch size is not a positive number, never commit batches and just fall through to the final add
-            # outside the loop.
-            if batching_enabled and len(batch) >= batch_size:
-                logger.debug(f"Adding intermediate batch of {len(batch)} records")
-                self.store.add_records(bundle=batch, partition=partition)
-                batch = []
+                # If batch size is not a positive number, never commit batches and just fall through to the final add
+                # outside the loop.
+                if batching_enabled and len(batch) >= batch_size:
+                    logger.debug(f"Adding intermediate batch of {len(batch)} records")
+                    self.store.add_records(bundle=batch, partition=partition)
+                    batch = []
         # Final add for anything not added in a batch above
         if batch:
             logger.debug(f"Adding final batch of {len(batch)} records")

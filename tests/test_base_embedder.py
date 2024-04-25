@@ -11,7 +11,7 @@ from beaker_bunsen.vectordb.types import LoadableResource
 from beaker_bunsen.vectordb.chromadb_store import ChromaDBLocalStore
 from beaker_bunsen.vectordb.embedders.base import BaseEmbedder
 from beaker_bunsen.vectordb.loaders.local_file_loader import LocalFileLoader
-from beaker_bunsen.vectordb.embedders.documents import DocumentEmbedder
+from beaker_bunsen.vectordb.embedders.documentation import DocumentationEmbedder
 
 @pytest.fixture()
 def chromadb_store_path(tmp_path_factory):
@@ -54,7 +54,7 @@ def test_embedder_ingest_with_metadata(chromadb_store_path, test_data_paths):
     metadata_map = {os.path.basename(record.uri): record.metadata for record in ingested_records}
 
     assert all('embedder' in record.metadata.keys() for record in ingested_records)
-    assert metadata_map["mathjax_readme.md"] == {"embedder": "test_metadata"}
+    assert metadata_map["Lunar_Sample_Laboratory_Facility.html"] == {"embedder": "test_metadata"}
     assert metadata_map["yorkshire.txt"] == {"embedder": "test_metadata", "source": "wikipedia", "url": "https://en.wikipedia.org/wiki/Yorkshire"}
 
 
