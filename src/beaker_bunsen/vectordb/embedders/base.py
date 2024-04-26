@@ -1,32 +1,32 @@
-from typing import Callable, Optional, Iterator
+from typing import Iterator
 
 from .. import logger
 from ..loaders.base import BaseLoader
-from ..types import LoadableResource, Record, RecordBundle
+from ..types import LoadableResource, Record, RecordBundle, EmbeddingFunction
 from ..vector_store import VectorStore
-
-
-# class EmbeddableResource:
-#     def __init__(self, **kwargs) -> None:
-#         for key, value in kwargs.items():
-#             setattr(self, key, value)
 
 
 class BaseEmbedder:
     loader: BaseLoader
     store: VectorStore
-    embedding_function: Callable
+    embedding_function: EmbeddingFunction | None
+    chunk_size: int
+    chunk_overlap: int
 
     def __init__(
             self,
             loader: BaseLoader,
             store: VectorStore,
-            embedding_function: Callable = None
+            embedding_function: EmbeddingFunction | None = None,
+            chunk_size: int = 2000,
+            chunk_overlap: int = 100,
         ) -> None:
 
         self.loader = loader
         self.store = store
         self.embedding_function = embedding_function
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
     def prepare_records_from_resource(self, resource: LoadableResource) -> Iterator[Record]:
         record = Record(
@@ -47,10 +47,10 @@ class BaseEmbedder:
 
     def ingest(
             self,
-            locations: Optional[list[str]] = None,
-            partition: Optional[str] = None,
-            metadata: Optional[dict] = None,
-            embedding_function: Optional[Callable] = None,
+            locations: list[str] = None,
+            partition: str = None,
+            metadata: dict = None,
+            embedding_function: EmbeddingFunction = None,
             batch_size: int = 15,
         ):
 

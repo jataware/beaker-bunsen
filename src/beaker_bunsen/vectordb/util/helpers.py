@@ -3,6 +3,8 @@ import os
 import re
 from collections import deque
 
+import tiktoken
+
 
 def count_words(source: str) -> int:
     """Count the number of words in a string. A word is denoted by whitespace."""
@@ -10,6 +12,32 @@ def count_words(source: str) -> int:
         raise ValueError("Not a string")
     return len(source.split())
 
+
+def count_tokens(
+        source: str,
+        model_or_encoding: str = None
+    ):
+    if not isinstance(source, (str, bytes)):
+        raise ValueError("Not a string")
+
+    encoding = None
+    if model_or_encoding is None:
+        encoding = tiktoken.get_encoding("cl100k_base")  # Default to encoding used by GPT-4
+    else:
+        # Check if we are provided an encoding name
+        if model_or_encoding in tiktoken.list_encoding_names():
+            encoding = tiktoken.get_encoding(model_or_encoding)
+        # Check if provide a model name ()
+        elif (
+            model_or_encoding in tiktoken.model.MODEL_TO_ENCODING
+            or any(model_or_encoding.startswith(prefix) for prefix in tiktoken.model.MODEL_PREFIX_TO_ENCODING.keys())
+        ):
+            encoding = tiktoken.encoding_for_model(model_or_encoding)
+
+    if encoding is None:
+        raise ValueError(f"Unable to match '{model_or_encoding}' to a model or encoding in the tiktoken library")
+
+    return len(encoding.encode(source))
 
 
 def extract_md_codeblocks(source: str) -> list[tuple[str, str|None]]:

@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Union, Callable, Sequence, TypedDict
+from typing import Any, Union, Sequence, TypedDict
 from numpy.typing import NDArray
 import logging
 import numpy as np
 
-from .types import Record, RecordBundle, QueryResponse, LoadableResource
+from .types import Record, RecordBundle, QueryResponse, LoadableResource, EmbeddingFunction
 from .loaders.base import BaseLoader
 
 
@@ -15,12 +15,12 @@ logger = logging.getLogger("beaker_bunsen")
 class VectorStore(ABC):
 
     default_partition: str
-    default_embedding_function: Callable|None
+    default_embedding_function: EmbeddingFunction|None
 
     def __init__(
             self,
             default_partition: str|None = "default",
-            default_embedding_function: Callable|None = None
+            default_embedding_function: EmbeddingFunction|None = None
         ) -> None:
         if default_partition is not None:
             self.default_partition = default_partition
@@ -39,7 +39,7 @@ class VectorStore(ABC):
     @abstractmethod
     def get_records(
         self,
-        ids: any,
+        ids: Any,
         partition: str|None = None,
     ) -> Sequence[Record]:
         ...

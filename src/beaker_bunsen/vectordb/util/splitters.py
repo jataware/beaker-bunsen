@@ -33,6 +33,7 @@ from typing import (
     TypeVar,
 )
 
+from .helpers import count_tokens
 from .. import logger
 
 
@@ -60,9 +61,9 @@ class TextSplitter(ABC):
 
     def __init__(
         self,
-        chunk_size: int = 4000,
-        chunk_overlap: int = 200,
-        length_function: Callable[[str], int] = len,
+        chunk_size: int = 2000,
+        chunk_overlap: int = 100,
+        length_function: Callable[[str], int] = count_tokens,
         keep_separator: bool = False,
         add_start_index: bool = False,
         strip_whitespace: bool = True,

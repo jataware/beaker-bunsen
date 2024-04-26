@@ -2,7 +2,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from io import FileIO
 from numpy.typing import NDArray
-from typing import Any, Union, Callable, Sequence, TypedDict, Optional
+from typing import Any, Union, Callable, Sequence, TypedDict, Optional, Protocol
 
 
 # Define types
@@ -53,3 +53,8 @@ class LoadableResource:
     def __post_init__(self):
         if self.content is None and self.file_handle is None:
             raise ValueError("Either content or file_handle must be provided.")
+
+
+class EmbeddingFunction(Protocol):
+    def __call__(self, resource: LoadableResource, *args, **kwargs) -> list[float]:
+        ...

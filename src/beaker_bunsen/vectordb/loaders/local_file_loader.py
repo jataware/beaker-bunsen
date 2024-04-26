@@ -48,6 +48,9 @@ class LocalFileLoader(BaseLoader):
         else:
             locations = self.locations
 
+        if locations is None:
+            raise ValueError("No locations specified to discover local files")
+
         if not metadata:
             metadata = self.metadata
 

@@ -1,9 +1,14 @@
+import os
+import shutil
+import tempfile
+import zipfile
 from typing import Any, Sequence, Callable
+from typing_extensions import Self
 
 import chromadb
 from chromadb.api import ClientAPI
 
-from .types import Record, RecordBundle, QueryResponse, QueryResponse
+from .types import Record, RecordBundle, QueryResponse, QueryResponse, EmbeddingFunction
 from .vector_store import VectorStore
 from .loaders.base import BaseLoader
 
@@ -19,7 +24,7 @@ class BaseChromaDBStore(VectorStore):
             self,
             settings: dict|None,
             default_partition: str|None = None,
-            default_embedding_function: Callable|None = None,
+            default_embedding_function: EmbeddingFunction|None = None,
         ) -> None:
         self.settings = settings
         if default_partition is None and settings:
@@ -80,7 +85,7 @@ class BaseChromaDBStore(VectorStore):
         else:
             return []
 
-    def get_records(self, ids: any, partition: str | None = None, include_embeddings=False):
+    def get_records(self, ids: Any, partition: str | None = None, include_embeddings=False):
         collection = self.get_collection(partition)
         include = self._chromadb_get_include[:]
         if include_embeddings:
@@ -186,10 +191,10 @@ class BaseChromaDBStore(VectorStore):
 class ChromaDBLocalStore(BaseChromaDBStore):
     def __init__(
             self,
-            path,
+            path: str,
             settings: dict|None = None,
             default_partition: str|None = None,
-            default_embedding_function: Callable|None = None,
+            default_embedding_function: EmbeddingFunction|None = None,
         ):
         self.client = chromadb.PersistentClient(path=path)
         super().__init__(
@@ -206,7 +211,7 @@ class ChromaDBServerStore(BaseChromaDBStore):
             port: str|int,
             settings: dict|None = None,
             default_partition: str|None = None,
-            default_embedding_function: Callable|None = None,
+            default_embedding_function: EmbeddingFunction|None = None,
         ):
         self.client = chromadb.HttpClient(host=host, port=port)
         super().__init__(
@@ -214,3 +219,63 @@ class ChromaDBServerStore(BaseChromaDBStore):
             default_partition=default_partition,
             default_embedding_function=default_embedding_function,
         )
+
+
+class ZippedChromaDBStore(ChromaDBLocalStore):
+    zipfile: str
+    tempdir: str
+
+    def __init__(
+            self,
+            path: str,
+            settings: dict|None = None,
+            default_partition: str|None = None,
+            default_embedding_function: EmbeddingFunction|None = None,
+        ):
+        self.zipfile = path
+        self.tempdir = tempfile.mkdtemp()
+        local_store_path = os.path.join(self.tempdir, "store")
+
+        os.makedirs(local_store_path)
+
+        if os.path.isfile(path):
+            with zipfile.ZipFile(path) as zipped_store:
+                zipped_store.extractall(local_store_path)
+
+        super().__init__(
+            path=local_store_path,
+            settings=settings,
+            default_partition=default_partition,
+            default_embedding_function=default_embedding_function,
+        )
+
+    def __del__(self):
+        print("cleaning up")
+        self.cleanup()
+
+    def cleanup(self):
+        if self.tempdir and os.path.exists(self.tempdir):
+            shutil.rmtree(self.tempdir)
+
+    @classmethod
+    def from_localstore(cls, localstore: ChromaDBLocalStore, zipfile: str) -> Self:
+        self = cls.__new__(cls)
+        self.zipfile = zipfile
+        self.tempdir = None
+
+        # Copy state from the provided localstore
+        self.__dict__.update(localstore.__dict__)
+
+        return self
+
+    def update_zipfile(self):
+        client_path = getattr(self.client, '_identifier', None)
+        if not client_path:
+            raise LookupError('Unable to lookup chromadb path')
+        with zipfile.ZipFile(self.zipfile, 'a') as zipped_store:
+            for (dirpath, _, files ) in os.walk(client_path):
+                dirpath: str
+                for file in files:
+                    arcpath = os.path.join(dirpath.removeprefix(client_path), file).lstrip('/')
+                    filepath = os.path.join(dirpath, file)
+                    zipped_store.write(filename=filepath, arcname=arcpath)

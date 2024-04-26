@@ -22,7 +22,10 @@ class DocumentationEmbedder(BaseEmbedder):
         if not content:
             raise ValueError(f"Can't retrieve content for resource {resource}")
 
-        splitter = RecursiveCharacterTextSplitter()
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+        )
         for i, content_chunk in enumerate(
                 splitter.split_text(content),
                 start=1

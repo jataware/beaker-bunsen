@@ -32,7 +32,12 @@ def test_document_splitting(chromadb_store_path, test_data_path):
     filename = str(test_data_path / (os.listdir(test_data_path))[0])
     loader = LocalFileLoader(locations=[filename])
     store = ChromaDBLocalStore(path=chromadb_store_path)
-    embedder = DocumentationEmbedder(loader=loader, store=store)
+    embedder = DocumentationEmbedder(
+        loader=loader,
+        store=store,
+        chunk_size=400,
+        chunk_overlap=80,
+    )
 
     embedder.ingest()
 
@@ -41,7 +46,7 @@ def test_document_splitting(chromadb_store_path, test_data_path):
     record_ids = sorted(record.id for record in ingested_records)
 
     assert len(ingested_records) > 1
-    assert first_record.content[-40:] in second_record.content[:200]  # Assert overlap feature is working
+    assert first_record.content[-20:] in second_record.content[:400]  # Assert overlap feature is working
     assert first_record.uri == f"file:{filename}"
     with open(filename) as rawfile:
         raw_data = rawfile.read()
