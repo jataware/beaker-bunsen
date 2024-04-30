@@ -7,7 +7,7 @@ import os
 import pytest
 from pathlib import Path
 
-from beaker_bunsen.vectordb.types import LoadableResource
+from beaker_bunsen.vectordb.types import Resource
 from beaker_bunsen.vectordb.chromadb_store import ChromaDBLocalStore
 from beaker_bunsen.vectordb.embedders.base import BaseEmbedder
 from beaker_bunsen.vectordb.loaders.local_file_loader import LocalFileLoader
@@ -95,7 +95,7 @@ def test_embedder_ingest_partition_override(chromadb_store_path, test_data_paths
 
 def generate_embedding_function(start=0):
     glob = {"count": start}
-    def embedding_function(resource: LoadableResource, outer_ref=glob):
+    def embedding_function(resource: Resource, outer_ref=glob):
         return_val = [float(outer_ref["count"])] * 384
         outer_ref["count"] += 1
         return return_val

@@ -1,14 +1,15 @@
 from typing import Iterator
 
-from ..types import LoadableResource, Record
+from ..types import Resource, Record
 from .base import BaseEmbedder
+from ..loaders.schemes import read_from_uri
 from ..util.helpers import count_words
 from ..util.splitters import RecursiveCharacterTextSplitter
 
 
 class DocumentationEmbedder(BaseEmbedder):
 
-    def prepare_records_from_resource(self, resource: LoadableResource) -> Iterator[Record]:
+    def prepare_records_from_resource(self, resource: Resource) -> Iterator[Record]:
         content = None
         if resource.content:
             content = resource.content
@@ -18,9 +19,16 @@ class DocumentationEmbedder(BaseEmbedder):
             except IOError:
                 pass
             content = resource.file_handle.read()
+        elif resource.uri:
+            content = read_from_uri(resource.uri)
 
-        if not content:
+        if content is None:
             raise ValueError(f"Can't retrieve content for resource {resource}")
+
+        if isinstance(content, (str, bytes)) and len(content) == 0:
+            # Empty file, no chunks to yield
+            return
+
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,

@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import Optional
 
 from .base import BaseLoader
-from ..types import LoadableResource
+from ..types import Resource
 
 
 class LocalFileLoader(BaseLoader):
 
     SLUG = "local"
-    URI_PREFIX = "file"
+    URI_SCHEME = "file"
 
     def __init__(self, locations: list[str] | None = None, metadata: dict | None = None) -> None:
         if locations:
@@ -82,14 +82,14 @@ class LocalFileLoader(BaseLoader):
 
                 metadata = self.collapse_metadata(location_metadata)
                 with open(location, 'r') as doc:
-                    resource = LoadableResource(uri=self.get_uri_for_location(location), file_handle=doc, metadata=metadata)
+                    resource = Resource(uri=self.get_uri_for_location(location), file_handle=doc, metadata=metadata)
                     resource.id = self.get_id_for_resource(resource)
                     yield resource
 
     def load(self, uri: str):
         if isinstance(uri, Path):
             uri = str(uri)
-        location = uri.removeprefix("file:")
+        location = uri.removeprefix(f"{self.URI_SCHEME}:")
         with open(location, 'r') as data_file:
             data = data_file.read()
         return data

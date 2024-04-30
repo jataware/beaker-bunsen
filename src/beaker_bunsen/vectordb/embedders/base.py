@@ -2,12 +2,12 @@ from typing import Iterator
 
 from .. import logger
 from ..loaders.base import BaseLoader
-from ..types import LoadableResource, Record, RecordBundle, EmbeddingFunction
+from ..types import Resource, Record, RecordBundle, EmbeddingFunction
 from ..vector_store import VectorStore
 
 
 class BaseEmbedder:
-    loader: BaseLoader
+    default_loader: BaseLoader | None
     store: VectorStore
     embedding_function: EmbeddingFunction | None
     chunk_size: int
@@ -15,20 +15,20 @@ class BaseEmbedder:
 
     def __init__(
             self,
-            loader: BaseLoader,
             store: VectorStore,
+            loader: BaseLoader | None = None,
             embedding_function: EmbeddingFunction | None = None,
             chunk_size: int = 2000,
             chunk_overlap: int = 100,
         ) -> None:
 
-        self.loader = loader
+        self.default_loader = loader
         self.store = store
         self.embedding_function = embedding_function
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    def prepare_records_from_resource(self, resource: LoadableResource) -> Iterator[Record]:
+    def prepare_records_from_resource(self, resource: Resource) -> Iterator[Record]:
         record = Record(
             id=resource.id,
             uri=resource.uri,
@@ -47,6 +47,7 @@ class BaseEmbedder:
 
     def ingest(
             self,
+            loader: BaseLoader | None = None,
             locations: list[str] = None,
             partition: str = None,
             metadata: dict = None,
@@ -54,15 +55,21 @@ class BaseEmbedder:
             batch_size: int = 15,
         ):
 
+        if loader is None:
+            if self.default_loader is None:
+                raise ValueError("No loader provided for ingestion")
+            else:
+                loader = self.default_loader
+
         batching_enabled = isinstance(batch_size, int) and batch_size >= 0
         batch = []
-        for loadable in self.loader.discover(locations=locations, metadata=metadata):
-            for record in self.prepare_records_from_resource(resource=loadable):
+        for resource in loader.discover(locations=locations, metadata=metadata):
+            for record in self.prepare_records_from_resource(resource=resource):
 
                 if embedding_function:
-                    record.embedding = embedding_function(loadable)
+                    record.embedding = embedding_function(resource)
                 elif self.embedding_function:
-                    record.embedding = self.embedding_function(loadable)
+                    record.embedding = self.embedding_function(resource)
 
                 batch.append(record)
 

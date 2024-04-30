@@ -6,13 +6,13 @@ from collections import deque
 from typing import Optional
 
 from .base import BaseLoader
-from ..types import LoadableResource
+from ..types import Resource
 
 logger = logging.getLogger("beaker_bunsen")
 
 class BaseCodeLoader(BaseLoader):
 
-    URI_PREFIX = "file"
+    URI_SCHEME = "file"
 
 
 class PythonLibraryLoader(BaseCodeLoader):
@@ -71,7 +71,7 @@ class PythonLibraryLoader(BaseCodeLoader):
                 source = None
 
             # TODO: yield at the module/submodule/class/function level instead of the source file level?
-            resource = LoadableResource(uri=self.get_uri_for_location(module_spec.origin), content=source, metadata=metadata)
+            resource = Resource(uri=self.get_uri_for_location(module_spec.origin), content=source, metadata=metadata)
             resource.id = self.get_id_for_resource(resource)
             yield resource
 

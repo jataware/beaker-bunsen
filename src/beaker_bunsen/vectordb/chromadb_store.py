@@ -1,9 +1,10 @@
 import os
 import shutil
 import tempfile
-import zipfile
+from pathlib import Path
 from typing import Any, Sequence, Callable
 from typing_extensions import Self
+from zipfile import ZipFile
 
 import chromadb
 from chromadb.api import ClientAPI
@@ -53,8 +54,6 @@ class BaseChromaDBStore(VectorStore):
             formatted_response.append({"query": query, "matches": matches})
         return formatted_response
 
-
-
     @classmethod
     def parse_results(cls, results):
         pared_results = {k: v for k, v in results.items() if v is not None}
@@ -72,6 +71,9 @@ class BaseChromaDBStore(VectorStore):
             for result in results
         ]
         return records
+
+    def get_partitions(self) -> list[str]:
+        return [collection.name for collection in self.client.list_collections()]
 
     def get_collection(self, partition=None, data_loader=None):
         if partition is None:
@@ -187,15 +189,41 @@ class BaseChromaDBStore(VectorStore):
         results = self.parse_query_results(query_strings, response)
         return results
 
+    def clone(
+            self,
+            **kwargs,
+        ) -> Self:
+        clone = self.__class__(**kwargs)
+        return clone
+
+    def save_to(
+        self,
+        destination: str | Path,
+    ) -> str:
+        source = getattr(self.client, '_identifier', None)
+        if not isinstance(destination, Path):
+            destination = Path(destination)
+        if not destination.parent.exists():
+            destination.parent.mkdir(parents=True)
+
+        if destination.exists():
+            if destination.is_dir():
+                destination = destination / "store"
+            else:
+                raise FileExistsError("Unable to save store as destination already exists.")
+
+        shutil.copytree(source, destination, dirs_exist_ok=False)
+        return str(destination)
+
 
 class ChromaDBLocalStore(BaseChromaDBStore):
     def __init__(
-            self,
-            path: str,
-            settings: dict|None = None,
-            default_partition: str|None = None,
-            default_embedding_function: EmbeddingFunction|None = None,
-        ):
+        self,
+        path: str,
+        settings: dict|None = None,
+        default_partition: str|None = None,
+        default_embedding_function: EmbeddingFunction|None = None,
+    ):
         self.client = chromadb.PersistentClient(path=path)
         super().__init__(
             settings=settings,
@@ -203,16 +231,33 @@ class ChromaDBLocalStore(BaseChromaDBStore):
             default_embedding_function=default_embedding_function,
         )
 
+    def clone(self, path=None, **kwargs) -> Self:
+        if path is None:
+            path = Path(tempfile.mkdtemp())
+        if not path.is_dir:
+            path.mkdir(parents=True)
+        client_path = getattr(self.client, '_identifier', None)
+        if not client_path:
+            raise ValueError("Unable to locate path to existing store")
+        client_path = Path(client_path)
+        shutil.copytree(client_path, path)
+        return ChromaDBLocalStore(
+            path,
+            settings=self.settings,
+            default_embedding_function=self.default_embedding_function,
+            default_partition=self.default_partition
+        )
+
 
 class ChromaDBServerStore(BaseChromaDBStore):
     def __init__(
-            self,
-            host: str,
-            port: str|int,
-            settings: dict|None = None,
-            default_partition: str|None = None,
-            default_embedding_function: EmbeddingFunction|None = None,
-        ):
+        self,
+        host: str,
+        port: str|int,
+        settings: dict|None = None,
+        default_partition: str|None = None,
+        default_embedding_function: EmbeddingFunction|None = None,
+    ):
         self.client = chromadb.HttpClient(host=host, port=port)
         super().__init__(
             settings=settings,
@@ -226,12 +271,12 @@ class ZippedChromaDBStore(ChromaDBLocalStore):
     tempdir: str
 
     def __init__(
-            self,
-            path: str,
-            settings: dict|None = None,
-            default_partition: str|None = None,
-            default_embedding_function: EmbeddingFunction|None = None,
-        ):
+        self,
+        path: str,
+        settings: dict|None = None,
+        default_partition: str|None = None,
+        default_embedding_function: EmbeddingFunction|None = None,
+    ):
         self.zipfile = path
         self.tempdir = tempfile.mkdtemp()
         local_store_path = os.path.join(self.tempdir, "store")
@@ -239,7 +284,7 @@ class ZippedChromaDBStore(ChromaDBLocalStore):
         os.makedirs(local_store_path)
 
         if os.path.isfile(path):
-            with zipfile.ZipFile(path) as zipped_store:
+            with ZipFile(path) as zipped_store:
                 zipped_store.extractall(local_store_path)
 
         super().__init__(
@@ -248,6 +293,43 @@ class ZippedChromaDBStore(ChromaDBLocalStore):
             default_partition=default_partition,
             default_embedding_function=default_embedding_function,
         )
+
+    def clone(
+        self,
+        path=None,
+        tempdir=None
+    ) -> Self:
+        clone = self.__new__(self.__class__)
+
+        if tempdir is None:
+            tempdir = Path(tempfile.mkdtemp())
+
+        if path is None:
+            path = self.zipfile
+
+        print(f"{self.tempdir=}")
+        print(f"{getattr(self.client, '_identifier', None)}=")
+        print(f"{self.zipfile=}")
+        print(f"{path=}")
+        clone.zipfile = path
+        clone.tempdir = tempdir
+        clone_store_dir = tempdir / "store"
+
+        source_store_path = os.path.join(self.tempdir, "store")
+        shutil.copytree(source_store_path, clone_store_dir)
+
+        super(clone.__class__, clone).__init__(
+            path=str(clone_store_dir),
+            settings=self.settings,
+            default_embedding_function=self.default_embedding_function,
+            default_partition=self.default_partition,
+        )
+
+
+        print(f"{clone.tempdir=}")
+        print(f"{getattr(clone.client, '_identifier', None)}=")
+        print(f"{clone.zipfile=}")
+        return clone
 
     def __del__(self):
         print("cleaning up")
@@ -268,14 +350,36 @@ class ZippedChromaDBStore(ChromaDBLocalStore):
 
         return self
 
-    def update_zipfile(self):
+    def update_zipfile(self, zipfile: str | None = None):
         client_path = getattr(self.client, '_identifier', None)
         if not client_path:
             raise LookupError('Unable to lookup chromadb path')
-        with zipfile.ZipFile(self.zipfile, 'a') as zipped_store:
+        if zipfile is None:
+            zipfile = self.zipfile
+        with ZipFile(zipfile, 'a') as zipped_store:
             for (dirpath, _, files ) in os.walk(client_path):
                 dirpath: str
                 for file in files:
                     arcpath = os.path.join(dirpath.removeprefix(client_path), file).lstrip('/')
                     filepath = os.path.join(dirpath, file)
                     zipped_store.write(filename=filepath, arcname=arcpath)
+
+    def save_to(
+        self,
+        destination: str | Path,
+    ) -> str:
+        if not isinstance(destination, Path):
+            destination = Path(str)
+
+        if not destination.parent.exists():
+            destination.parent.mkdir(parents=True)
+
+        if destination.exists():
+            if destination.is_dir():
+                destination = destination / "store.zip"
+
+        if not destination.name.endswith(".zip"):
+            raise ValueError("ZippedVectorStore instances can only be saved to files ending in the extension .zip")
+
+        self.update_zipfile(zipfile=destination)
+        return str(destination)

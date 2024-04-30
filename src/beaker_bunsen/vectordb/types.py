@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from io import FileIO
 from numpy.typing import NDArray
 from typing import Any, Union, Callable, Sequence, TypedDict, Optional, Protocol
+from urllib.parse import urlparse
 
 
 # Define types
@@ -40,7 +41,7 @@ class QueryResponse(TypedDict):
 
 
 @dataclass
-class LoadableResource:
+class Resource:
     """
 
     """
@@ -54,7 +55,11 @@ class LoadableResource:
         if self.content is None and self.file_handle is None:
             raise ValueError("Either content or file_handle must be provided.")
 
+    def read_content_from_uri(self):
+        parsed_uri = urlparse(self.uri)
+        scheme = parsed_uri.scheme
+
 
 class EmbeddingFunction(Protocol):
-    def __call__(self, resource: LoadableResource, *args, **kwargs) -> list[float]:
+    def __call__(self, resource: Resource, *args, **kwargs) -> list[float]:
         ...

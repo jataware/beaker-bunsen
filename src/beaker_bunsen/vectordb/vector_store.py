@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Union, Sequence, TypedDict
+from typing_extensions import Self
 from numpy.typing import NDArray
 import logging
 import numpy as np
 
-from .types import Record, RecordBundle, QueryResponse, LoadableResource, EmbeddingFunction
+from .types import Record, RecordBundle, QueryResponse, Resource, EmbeddingFunction
 from .loaders.base import BaseLoader
 
 
@@ -27,6 +28,10 @@ class VectorStore(ABC):
         else:
             self.default_partition = "default"
         self.default_embedding_function = default_embedding_function
+
+    @abstractmethod
+    def get_partitions(self) -> list[str]:
+        ...
 
     @abstractmethod
     def get_record(
@@ -73,6 +78,7 @@ class VectorStore(ABC):
         query_string: str,
         partition: str | None = None,
         limit: int = -1,
+        # TODO: Add extra filtering, as over metadata/subpartition/attribute/etc
     ) -> QueryResponse:
         ...
 
@@ -83,4 +89,17 @@ class VectorStore(ABC):
         partition: str | None = None,
         limit: int = -1,
     ) -> Sequence[QueryResponse]:
+        ...
+
+    @abstractmethod
+    def clone(self, **kwargs) -> Self:
+        ...
+
+    @abstractmethod
+    def save_to(
+        self,
+        destination: str,
+        *args,
+        **kwargs,
+    ) -> str:
         ...

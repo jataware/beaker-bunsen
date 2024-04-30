@@ -2,7 +2,7 @@ import os
 import pytest
 from pathlib import Path
 
-from beaker_bunsen.vectordb.types import LoadableResource
+from beaker_bunsen.vectordb.types import Resource
 from beaker_bunsen.vectordb.loaders.code_library_loader import PythonLibraryLoader
 
 
