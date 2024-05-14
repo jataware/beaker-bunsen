@@ -291,4 +291,4 @@ def test_clone_zipfiles_correct(test_data_path, test_temp_path):
     assert len(verif_records) == len(orig_records) + 1
     assert set(r.id for r in verif_records) - set(r.id for r in orig_records) == set(['added_to_clone'])
     assert source_location.stat().st_mtime != cloned_zip_location.stat().st_mtime
-    assert [f.filename for f in orig_filelist] == [f.filename for f in cloned_filelist]
+    assert sorted([f.filename for f in orig_filelist]) == sorted([f.filename for f in cloned_filelist])
