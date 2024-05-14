@@ -17,6 +17,14 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+            - name: Install hatch
+              shell: bash
+              run: |
+                  pip install hatch hatchling
+            - name: hatch build
+              shell: bash
+              run: |
+                  hatch build
 
             - name: Publish package distributions to PyPI
               uses: pypa/gh-action-pypi-publish@release/v1
