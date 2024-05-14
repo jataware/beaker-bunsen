@@ -23,7 +23,7 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
-  "beaker-kernel~=1.4",
+  "beaker-kernel~=1.5.1",
   "archytas~=1.1.6",
   "chromadb~=0.4.22",
   "tenacity~=8.2.3",

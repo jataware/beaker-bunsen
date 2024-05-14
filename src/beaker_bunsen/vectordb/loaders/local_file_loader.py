@@ -17,11 +17,15 @@ class LocalFileLoader(BaseLoader):
     def __init__(
         self,
         locations: list[str] | None = None,
-        metadata: dict | None = None
+        metadata: dict | None = None,
+        exclusions: list[str] | None = None,
     ):
+        exclusions = exclusions or []
         if locations:
+            locations, parsed_exclusions = self.parse_locations(locations)
+            exclusions.extend(parsed_exclusions)
             self._check_locations_exist(locations)
-        super().__init__(locations, metadata)
+        super().__init__(locations, metadata, exclusions)
 
     @staticmethod
     def _check_locations_exist(locations: list[str]):
@@ -46,9 +50,17 @@ class LocalFileLoader(BaseLoader):
         self,
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
+        exclusions: list[str] = Default,
     ):
+        # Initialize exclusions first so we can extend it if there are any negated locations
+        if exclusions is Default:
+            exclusions = self.exclusions
+
         # Validate locations if they are passed in. If they are not, use location from initialization.
         if locations is not Default:
+            # Update or define locations and exclusions based on '!' prefix in location.
+            locations, parsed_exclusions = self.parse_locations(locations)
+            exclusions.extend(parsed_exclusions)
             self._check_locations_exist(locations)
         else:
             locations = self.locations
@@ -65,6 +77,10 @@ class LocalFileLoader(BaseLoader):
             location, location_metadata = locations_queue.popleft()
             if isinstance(location, Path):
                 location = str(location.absolute())
+
+            if self.should_exclude(str(location)):
+                continue
+
             if os.path.isdir(location):
                 # Check for directory metadata file
                 dir_metadata_path = os.path.join(location, '.metadata')

@@ -29,6 +29,7 @@ class PythonLibraryLoader(BaseCodeLoader):
         self,
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
+        exclusions: list[str] = Default,
     ):
         """
         The `locations` should be Python packages, modules or submodules that are installed via the pyproject
@@ -47,6 +48,12 @@ class PythonLibraryLoader(BaseCodeLoader):
             locations = self.locations
         if metadata is Default:
             metadata = self.metadata
+        if exclusions is Default:
+            exclusions = self.exclusions
+
+        # Update or define locations and exclusions based on '!' prefix in location.
+        locations, parsed_exclusions = self.parse_locations(locations)
+        exclusions.extend(parsed_exclusions)
 
         modules_to_collect = deque()
         for module_name in locations:
@@ -58,15 +65,18 @@ class PythonLibraryLoader(BaseCodeLoader):
         while modules_to_collect:
             module_spec = modules_to_collect.popleft()
 
-            # TODO: Switch this to type of loader? SourceFileLoader works, ExtensionFileLoader doesn't...
             if not module_spec.origin.endswith('.py'):
                 logger.info(f"Skipping importing non-python file {module_spec.origin}")
                 continue
 
-            # if module_spec.submodule_search_locations:
             if getattr(module_spec, "submodule_search_locations", []):
                 subpkg_info: pkgutil.ModuleInfo = pkgutil.iter_modules(path=module_spec.submodule_search_locations)
                 subpkg_specs = (info.module_finder.find_spec(f"{module_spec.name}.{info.name}") for info in subpkg_info)
+                if self.exclusions:
+                    subpkg_specs = (
+                        spec for spec in subpkg_specs
+                        if not self.should_exclude(spec)
+                    )
                 modules_to_collect.extend(
                     subpkg_specs
                 )

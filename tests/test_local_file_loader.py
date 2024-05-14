@@ -98,3 +98,25 @@ def test_load_relative_local_file():
     assert isinstance(data, str)
     assert data.startswith("Yorkshire")
     assert data.endswith("Yorkshire Rugby Football Union.\n")
+
+def test_exclusions_init():
+    exclusion = "ato"
+    abs_file_path = Path(__file__).parent / "data" / "documents"
+    local_file_loader = LocalFileLoader(
+        locations=[abs_file_path],
+        exclusions=[exclusion],
+    )
+    found_locations = set([record.uri for record in local_file_loader.discover()])
+    # Strip off any `{prefix}:` from the locations
+    found_files = set([location.split(":", maxsplit=1)[1] for location in found_locations])
+
+    files_from_os_walk = set()
+    for path, _, files in os.walk(abs_file_path, ):
+        files_from_os_walk.update([os.path.join(path, f) for f in files if not f.endswith('.metadata')])
+
+    excluded_files = files_from_os_walk - found_files
+
+    assert len(found_files) < len(files_from_os_walk)
+    assert any([exclusion in filename for filename in files_from_os_walk])
+    assert all([exclusion in filename for filename in excluded_files])
+    assert all([exclusion not in filename for filename in found_files])

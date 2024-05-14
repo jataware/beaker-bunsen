@@ -16,20 +16,25 @@ class BaseLoader(ABC):
     def __init__(
             self,
             locations: list[str] | None = None,
-            metadata: dict | None = None
+            metadata: dict | None = None,
+            exclusions: list[str] | None = None,
         ) -> None:
         super().__init__()
-        self.locations = locations
-        if metadata:
-            self.metadata = metadata
+        self.exclusions = exclusions or []
+        self.metadata = metadata or {}
+        if locations:
+            parsed_locations, parsed_exclusions = self.parse_locations(locations)
+            self.locations = parsed_locations
+            self.exclusions.extend(parsed_exclusions)
         else:
-            self.metadata = {}
+            self.locations = locations
 
     @abstractmethod
     def discover(
         self,
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
+        exclusions: list[str] | DefaultType = Default,
     ):
         ...
 
@@ -40,6 +45,31 @@ class BaseLoader(ABC):
         base: str = "",
     ):
         ...
+
+
+    def parse_locations(
+        self,
+        locations: list[str],
+    ) -> tuple[list[str], list[str]]:
+        exclusions = []
+        for location in locations[:]:
+            if str(location).startswith("!"):
+                exclusion_value = str(locations.pop(location))
+                exclusions.append(exclusion_value.removeprefix('!'))
+        return locations, exclusions
+
+
+    def should_exclude(
+        self,
+        location: str,
+        exclusions: list[str] | DefaultType = Default
+    ):
+        if exclusions is Default:
+            exclusions = self.exclusions
+        for exclusion in exclusions:
+            if exclusion in location:
+                return True
+        return False
 
     @classmethod
     def get_id_for_resource(cls, resource: Resource):

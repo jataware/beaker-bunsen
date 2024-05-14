@@ -29,12 +29,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class EnvironmentSerializer:
+    pass
+
+
 class BunsenContext(BaseContext):
     agent_cls: BunsenAgent
     corpus: Corpus
 
     enabled_subkernels: list[str]
     bunsen_config: dict[str, Any] | None
+    environment_serializer: EnvironmentSerializer
 
     def __init__(
         self,

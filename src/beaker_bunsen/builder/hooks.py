@@ -14,7 +14,7 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 from hatchling.plugin import hookimpl
 
 from beaker_kernel.lib.context import BaseContext
-from ..vectordb.embedders import DocumentationEmbedder, ExampleEmbedder
+from ..vectordb.embedders import DocumentationEmbedder, ExampleEmbedder, CodeEmbedder, PythonEmbedder
 from ..vectordb.loaders import LocalFileLoader, PythonLibraryLoader
 from ..vectordb.chromadb_store import ZippedChromaDBStore
 from ..corpus import Corpus
@@ -117,7 +117,7 @@ class BunsenHook(BuildHookInterface):
 
         if python_libraries:
             corpus.ingest(
-                embedder_cls=DocumentationEmbedder,
+                embedder_cls=PythonEmbedder,
                 loader=PythonLibraryLoader(locations=python_libraries),
                 partition="code"
             )

@@ -44,3 +44,8 @@ def test_python_load():
     assert source.startswith('r"""OS')
     assert "\nenviron = " in source
     assert "def makedirs(" in source
+
+
+def test_exclusions_init():
+    # TODO: Fill me in along with other tests
+    pass
