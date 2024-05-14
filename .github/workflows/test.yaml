@@ -18,6 +18,10 @@ jobs:
             id-token: write
         steps:
             - uses: actions/checkout@v4
+            - name: Install hatch
+              shell: bash
+              run: |
+                  pip install hatch hatchlings
             - name: Run Tests
               shell: bash
               run: |
