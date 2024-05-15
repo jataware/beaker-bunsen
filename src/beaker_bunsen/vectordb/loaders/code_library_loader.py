@@ -1,11 +1,12 @@
 import importlib
 import importlib.util
 import logging
-import os.path
 import pkgutil
+import requests
 import sys
 from collections import deque
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from .base import BaseLoader
@@ -114,21 +115,90 @@ class PythonLibraryLoader(BaseCodeLoader):
         else:
             uri = self.Scheme.get_uri_for_location(location, base)
         return read_from_uri(uri)
-        # uri_parts = urlparse(uri)
-        # if uri_parts.scheme != self.URI_SCHEME:
-        #     return ValueError(f"Provided scheme ({uri_parts.scheme}) does not match expected scheme ({self.URI_SCHEME})")
-        # location = uri_parts.path
-        # with open(location, 'r') as python_file:
-        #     source = python_file.read()
-        # return source
 
 
-# class RLangLoader(BaseCodeLoader):
-#     def discover(self, locations: list[str], metadata: dict = None, *args, **kwargs):
-#         return super().discover(locations, metadata, *args, **kwargs)
+class RCRANSourceLoader(BaseCodeLoader):
+    REPO: str = "https://cran.rstudio.com/src/contrib"
 
-#     def load(self, location: str):
-#         return super().load(location)
+    remote_package_cache: dict[str, Any] | None = {}
+    local_package_cache: dict[str, str] | None = {}
+
+    def __init__(
+        self,
+        locations: list[str] | None = None,
+        metadata: dict | None = None,
+        exclusions: list[str] | None = None
+    ) -> None:
+        self.build_package_cache()
+        super().__init__(locations, metadata, exclusions)
+
+    @classmethod
+    def build_package_cache(cls):
+        package_page = f"{cls.REPO}/PACKAGES"
+        package_req = requests.get(package_page)
+        package_content = package_req.text
+        packages = {}
+        current_package = {}
+        for line in package_content.splitlines():
+            if line == "":
+                packages[current_package["package"]] = current_package
+                current_package = {}
+                continue
+            elif line.startswith("       "):
+                current_package[label] += " " + line.lstrip()
+                continue
+            try:
+                label, value = line.split(":", maxsplit=1)
+                label = label.lower().strip()
+                value = value.strip()
+            except ValueError:
+                raise
+            current_package[label] = value
+        cls.remote_package_cache = packages
+
+    def discover(
+        self,
+        locations: list[str] | DefaultType = Default,
+        metadata: dict | DefaultType = Default,
+        exclusions: list[str] = Default,
+    ):
+        """
+        The `locations` should be R packages, as they are named in Cran with an option version number separated from the
+        package name by an @ symbol.
+
+        Example: locations=["purr", "jsonlite", "shiny@1.8.1", "leaflet@2.0"]
+        """
+        if locations is Default:
+            locations = self.locations
+        if metadata is Default:
+            metadata = self.metadata
+        if exclusions is Default:
+            exclusions = self.exclusions
+
+        # Update or define locations and exclusions based on '!' prefix in location.
+        locations, parsed_exclusions = self.parse_locations(locations)
+        exclusions.extend(parsed_exclusions)
+
+        for location in locations:
+            if '@' in location:
+                package_name, version = location.split("@", maxsplit=1)
+            else:
+                package = self.remote_package_cache.get(location, None)
+                if not package:
+                    raise LookupError(f"Unable to find CRAN package name '{location}'")
+                package_name = package["package"]
+                version = package["version"]
+
+            source_tarball_url = f"{self.REPO}/{package_name}_{version}.tgz"
+            # TODO: Read and decompress tarball. Iterate over files.
+
+
+    def read(
+        self,
+        location: str,
+        base: str = "",
+    ):
+        return ""
 
 
 # class GithubLoader(BaseCodeLoader):

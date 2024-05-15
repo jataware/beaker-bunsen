@@ -1,10 +1,11 @@
 import os
 import pytest
+from packaging.version import Version
 from pathlib import Path
 from urllib.parse import urlparse
 
 from beaker_bunsen.vectordb.types import Resource
-from beaker_bunsen.vectordb.loaders.code_library_loader import PythonLibraryLoader
+from beaker_bunsen.vectordb.loaders.code_library_loader import PythonLibraryLoader, RCRANSourceLoader
 
 
 def test_python_module_discovery():
@@ -95,3 +96,17 @@ def test_exclusions_base_exclusions():
     assert 'py-mod:requests.__version__' not in excluded_record_uris
 
     assert set(full_record_uris) - set(excluded_record_uris) == set(['py-mod:requests._internal_utils', 'py-mod:requests.__version__'])
+
+
+def test_r_cran_source_loader():
+    loader = RCRANSourceLoader()
+
+
+
+    # TODO: More testing
+
+
+
+    assert len(loader.remote_package_cache) > 0
+    assert "leaflet" in loader.remote_package_cache
+    assert Version(loader.remote_package_cache["leaflet"]["version"]) > Version("2.0")
