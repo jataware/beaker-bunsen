@@ -10,7 +10,7 @@ from pathlib import Path
 
 from beaker_bunsen.vectordb.types import Resource
 from beaker_bunsen.vectordb.chromadb_store import BaseChromaDBStore, ZippedChromaDBStore
-from beaker_bunsen.vectordb.embedders import BaseEmbedder, DocumentationEmbedder, ExampleEmbedder
+from beaker_bunsen.vectordb.embedders import BaseEmbedder, DocumentationEmbedder, ExampleEmbedder, CodeEmbedder
 from beaker_bunsen.vectordb.loaders import LocalFileLoader, PythonLibraryLoader
 from beaker_bunsen.vectordb.loaders.schemes import read_from_uri
 from beaker_bunsen.corpus import Corpus
@@ -47,7 +47,7 @@ def test_corpus_ingest(test_temp_path, test_data_path):
     corpus_records_2 = get_all_records_by_partition(corpus.store)
 
     requests_loader = PythonLibraryLoader(locations=["requests"])
-    corpus.ingest(embedder_cls=DocumentationEmbedder, loader=requests_loader, partition="code")
+    corpus.ingest(embedder_cls=CodeEmbedder, loader=requests_loader, partition="code")
 
     corpus_records_3 = get_all_records_by_partition(corpus.store)
 
@@ -69,7 +69,7 @@ def test_corpus_save_dir(test_temp_path, test_data_path):
     corpus.ingest(embedder_cls=DocumentationEmbedder, loader=example_loader, partition="documentation")
 
     requests_loader = PythonLibraryLoader(locations=["requests"])
-    corpus.ingest(embedder_cls=DocumentationEmbedder, loader=requests_loader, partition="code")
+    corpus.ingest(embedder_cls=CodeEmbedder, loader=requests_loader, partition="code")
 
     corpus.save_to_dir(save_dir=save_location)
 

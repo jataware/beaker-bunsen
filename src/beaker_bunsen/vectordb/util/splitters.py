@@ -182,6 +182,61 @@ class RecursiveCharacterTextSplitter(TextSplitter):
     that works.
     """
 
+    LANGUAGES_BY_EXTENSION = {
+        "rst": "restructured",
+        "py": "python",
+        "md": "markdown",
+        "jl": "julia",
+        "r": "r",
+    }
+
+    SEPARATORS_BY_LANGUAGE = {
+        "restructured": [
+                # Split along section titles
+                "\n=+\n",
+                "\n-+\n",
+                "\n\\*+\n",
+                # Split along directive markers
+                "\n\n.. *\n\n",
+                # Split by the normal type of lines
+                "\n\n",
+                "\n",
+                " ",
+                "",
+            ],
+        'python': [
+                # First, try to split along class definitions
+                "\nclass ",
+                "\ndef ",
+                "\n\tdef ",
+                "\n    def ",
+                # Now split by the normal type of lines
+                "\n\n",
+                "\n",
+                " ",
+                "",
+            ],
+        "markdown": [
+                # First, try to split along Markdown headings (starting with level 2)
+                "\n#{1,6} ",
+                # Note the alternative syntax for headings (below) is not handled here
+                # Heading level 2
+                # ---------------
+                # End of code block
+                "```\n",
+                # Horizontal lines
+                "\n\\*\\*\\*+\n",
+                "\n---+\n",
+                "\n___+\n",
+                # Note that this splitter doesn't handle horizontal lines defined
+                # by *three or more* of ***, ---, or ___, but this is not handled
+                "\n\n",
+                "\n",
+                " ",
+                "",
+            ]
+    }
+
     def __init__(
         self,
         separators: Optional[List[str]] = None,
@@ -241,55 +296,24 @@ class RecursiveCharacterTextSplitter(TextSplitter):
     def from_language(
         cls, language: str, **kwargs: Any
     ):
-        separators = cls.get_separators_for_language(language)
+        if language in cls.SEPARATORS_BY_LANGUAGE:
+            separators = cls.SEPARATORS_BY_LANGUAGE[language]
+        elif language in cls.LANGUAGES_BY_EXTENSION:
+            separators = cls.SEPARATORS_BY_LANGUAGE(cls.LANGUAGES_BY_EXTENSION[language])
+        else:
+            raise ValueError(f"Could not map language '{language}' to a known type for splitting/chunking.")
         return cls(separators=separators, is_separator_regex=True, **kwargs)
 
-    @staticmethod
-    def get_separators_for_language(extension: str) -> List[str]:
-        if extension == ".rst":
-            return [
-                # Split along section titles
-                "\n=+\n",
-                "\n-+\n",
-                "\n\\*+\n",
-                # Split along directive markers
-                "\n\n.. *\n\n",
-                # Split by the normal type of lines
-                "\n\n",
-                "\n",
-                " ",
-                "",
-            ]
-        elif extension == '.py':
-            return [
-                # First, try to split along class definitions
-                "\nclass ",
-                "\ndef ",
-                "\n\tdef ",
-                "\n    def ",
-                # Now split by the normal type of lines
-                "\n\n",
-                "\n",
-                " ",
-                "",
-            ]
-        elif extension == ".md":
-            return [
-                # First, try to split along Markdown headings (starting with level 2)
-                "\n#{1,6} ",
-                # Note the alternative syntax for headings (below) is not handled here
-                # Heading level 2
-                # ---------------
-                # End of code block
-                "```\n",
-                # Horizontal lines
-                "\n\\*\\*\\*+\n",
-                "\n---+\n",
-                "\n___+\n",
-                # Note that this splitter doesn't handle horizontal lines defined
-                # by *three or more* of ***, ---, or ___, but this is not handled
-                "\n\n",
-                "\n",
-                " ",
-                "",
-            ]
+    @classmethod
+    def from_extension(
+        cls, extension: str, **kwargs: Any
+    ):
+        if extension.startswith("."):
+            extension = extension.removeprefix(".")
+
+        language = cls.LANGUAGES_BY_EXTENSION.get(extension, None)
+        if language not in cls.SEPARATORS_BY_LANGUAGE:
+            raise ValueError(f"Could not map extension '{extension}' to a known type for splitting/chunking.")
+
+        separators = cls.SEPARATORS_BY_LANGUAGE[language]
+        return cls(separators=separators, is_separator_regex=True, **kwargs)

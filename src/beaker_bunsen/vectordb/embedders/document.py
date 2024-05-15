@@ -27,7 +27,7 @@ class DocumentEmbedder(BaseEmbedder):
         self.splitter = splitter
         super().__init__(store, loader, embedding_function, chunk_size, chunk_overlap)
 
-    def get_splitter(self):
+    def get_splitter(self, resource: Resource):
         if self.splitter:
             return self.splitter
         splitter = self.splitter_class(
@@ -56,7 +56,7 @@ class DocumentEmbedder(BaseEmbedder):
             # Empty file, no chunks to yield
             return
 
-        splitter = self.get_splitter()
+        splitter = self.get_splitter(resource)
         for i, content_chunk in enumerate(
                 splitter.split_text(content),
                 start=1
