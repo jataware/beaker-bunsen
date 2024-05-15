@@ -47,5 +47,51 @@ def test_python_load():
 
 
 def test_exclusions_init():
-    # TODO: Fill me in along with other tests
-    pass
+    excluded_python_loader = PythonLibraryLoader(locations=["requests", "!requests._internal_utils", "!__version__"])
+    excluded_requests_records = list(excluded_python_loader.discover())
+    full_python_loader = PythonLibraryLoader(locations=["requests"])
+    full_requests_records = list(full_python_loader.discover())
+
+    excluded_record_uris = [record.uri for record in excluded_requests_records]
+    full_record_uris = [record.uri for record in full_requests_records]
+
+    assert 'py-mod:requests._internal_utils' in full_record_uris
+    assert 'py-mod:requests.__version__' in full_record_uris
+    assert 'py-mod:requests._internal_utils' not in excluded_record_uris
+    assert 'py-mod:requests.__version__' not in excluded_record_uris
+
+    assert set(full_record_uris) - set(excluded_record_uris) == set(['py-mod:requests._internal_utils', 'py-mod:requests.__version__'])
+
+
+def test_exclusions_discover():
+    excluded_python_loader = PythonLibraryLoader()
+    excluded_requests_records = list(excluded_python_loader.discover(locations=["requests", "!requests._internal_utils", "!__version__"]))
+    full_python_loader = PythonLibraryLoader()
+    full_requests_records = list(full_python_loader.discover(locations=["requests"]))
+
+    excluded_record_uris = [record.uri for record in excluded_requests_records]
+    full_record_uris = [record.uri for record in full_requests_records]
+
+    assert 'py-mod:requests._internal_utils' in full_record_uris
+    assert 'py-mod:requests.__version__' in full_record_uris
+    assert 'py-mod:requests._internal_utils' not in excluded_record_uris
+    assert 'py-mod:requests.__version__' not in excluded_record_uris
+
+    assert set(full_record_uris) - set(excluded_record_uris) == set(['py-mod:requests._internal_utils', 'py-mod:requests.__version__'])
+
+
+def test_exclusions_base_exclusions():
+    excluded_python_loader = PythonLibraryLoader(exclusions=["__version__"])
+    excluded_requests_records = list(excluded_python_loader.discover(locations=["requests", "!requests._internal_utils"]))
+    full_python_loader = PythonLibraryLoader()
+    full_requests_records = list(full_python_loader.discover(locations=["requests"]))
+
+    excluded_record_uris = [record.uri for record in excluded_requests_records]
+    full_record_uris = [record.uri for record in full_requests_records]
+
+    assert 'py-mod:requests._internal_utils' in full_record_uris
+    assert 'py-mod:requests.__version__' in full_record_uris
+    assert 'py-mod:requests._internal_utils' not in excluded_record_uris
+    assert 'py-mod:requests.__version__' not in excluded_record_uris
+
+    assert set(full_record_uris) - set(excluded_record_uris) == set(['py-mod:requests._internal_utils', 'py-mod:requests.__version__'])

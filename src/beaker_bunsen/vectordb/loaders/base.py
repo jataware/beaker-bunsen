@@ -54,8 +54,9 @@ class BaseLoader(ABC):
         exclusions = []
         for location in locations[:]:
             if str(location).startswith("!"):
-                exclusion_value = str(locations.pop(location))
-                exclusions.append(exclusion_value.removeprefix('!'))
+                locations.remove(location)
+                exclusion_value = str(location).removeprefix('!')
+                exclusions.append(exclusion_value)
         return locations, exclusions
 
 

@@ -75,7 +75,7 @@ class PythonLibraryLoader(BaseCodeLoader):
                 if self.exclusions:
                     subpkg_specs = (
                         spec for spec in subpkg_specs
-                        if not self.should_exclude(spec)
+                        if not self.should_exclude(spec.name)
                     )
                 modules_to_collect.extend(
                     subpkg_specs
