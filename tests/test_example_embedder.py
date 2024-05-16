@@ -1,8 +1,3 @@
-# Use pysqlite3-bin library instead of OS pysqlite3 which may be an incompatible version
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-
 import os
 import pytest
 from pathlib import Path

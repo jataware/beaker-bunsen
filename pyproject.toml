@@ -29,9 +29,9 @@ dependencies = [
   "tenacity~=8.2.3",
   "tiktoken~=0.5.2",
   "marko~=2.0.3",
-  "pysqlite3-binary~=0.5.2",
   "hatchling",
 ]
+  # "pysqlite3-binary~=0.5.2",
 
 [project.entry-points.hatch]
 bunsen = "beaker_bunsen.builder.hooks"
