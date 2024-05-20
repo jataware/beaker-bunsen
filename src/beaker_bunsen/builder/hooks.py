@@ -15,7 +15,8 @@ from hatchling.plugin import hookimpl
 
 from beaker_kernel.lib.context import BaseContext
 from ..vectordb.embedders import DocumentationEmbedder, ExampleEmbedder, CodeEmbedder, PythonEmbedder
-from ..vectordb.loaders import LocalFileLoader, PythonLibraryLoader
+from ..vectordb.loaders import LocalFileLoader, PythonLibraryLoader, RCRANSourceLoader
+from ..vectordb.loaders.code_library_loader import RCRANLocalCache
 from ..vectordb.chromadb_store import ZippedChromaDBStore
 from ..corpus import Corpus
 
@@ -34,6 +35,7 @@ class BunsenHook(BuildHookInterface):
         "documentation_path",
         "examples_path",
         "python_libraries",
+        "r_cran_libraries",
         "library_descriptions",
     ]
     _CONFIG_KEYS_TO_IGNORE = [
@@ -100,6 +102,7 @@ class BunsenHook(BuildHookInterface):
         documentation_path = self.config.get("documentation_path", "documentation")
         examples_path = self.config.get("examples_path", "examples")
         python_libraries = self.config.get("python_libraries", [])
+        r_cran_libraries = self.config.get("r_cran_libraries", [])
 
         if documentation_path and os.path.exists(documentation_path):
             corpus.ingest(
@@ -118,9 +121,17 @@ class BunsenHook(BuildHookInterface):
         if python_libraries:
             corpus.ingest(
                 embedder_cls=PythonEmbedder,
-                loader=PythonLibraryLoader(locations=python_libraries),
+                loader=PythonLibraryLoader(locations=python_libraries, metadata={"language": "python"}),
                 partition="code"
             )
+
+        if r_cran_libraries:
+            with RCRANLocalCache(locations=r_cran_libraries):
+                corpus.ingest(
+                    embedder_cls=CodeEmbedder,
+                    loader=RCRANSourceLoader(locations=r_cran_libraries, metadata={"language": "r"}),
+                    partition="code",
+                )
 
         examples = corpus.store.get_all(partition="examples")
         if examples:
@@ -171,70 +182,6 @@ class BunsenHook(BuildHookInterface):
             return slug, dest_file
         else:
             return None, None
-
-            # with open(spec.origin, 'rb') as mod_file:
-            #     symbols = ast.parse(mod_file.read(), filename=spec.origin)
-            # # imports: set[str] = set()
-            # # import_froms: dict[str, str] = []
-            # # classes: list[ast.ClassDef] = []
-
-
-            # for symbol in symbols.body:
-            #     if isinstance(symbol, ast.ClassDef) and "BunsenContext" in [attr.id for attr in getattr(symbol, "bases", [])]:
-            #         class_name = symbol.name
-
-                # if isinstance(symbol, ast.Import):
-                #     imports.update([alias.name for alias in symbol.names])
-                # elif isinstance(symbol, ast.ImportFrom):
-                #     import_froms.append(symbol)
-                # elif isinstance(symbol, ast.ClassDef):
-                #     classes.append(symbol)
-
-            # print(imports)
-            # # print([a.name for i in imports for a in i.names])
-            # print(import_froms)
-            # # print()
-            # print(classes)
-            # for cls in classes:
-            #     for base in cls.bases:
-            #         if isinstance(base, ast.Attribute):
-            #             # parts = [base.attr]
-            #             parts = []
-            #             value = base
-            #             # value = base.value
-            #             while isinstance(value, ast.Attribute):
-            #                 parts.append(value.attr)
-            #                 value = value.value
-            #             if isinstance(value, ast.Name):
-            #                 parts.append(value.id)
-            #             parts.reverse()
-            #             print(parts)
-            #             for i in range(1, len(parts) + 1):
-            #                 key = '.'.join(parts[:i])
-            #                 if key in imports:
-            #                     remainder = parts[i:]
-            #                     print(f"{remainder=}")
-            #                     target = importlib.import_module(key)
-            #                     print(target)
-            #                     dir(target)
-            #                     for attr in remainder:
-            #                         target = getattr(target, attr)
-            #                     print(target)
-
-
-
-
-            #         elif isinstance(base, ast.Name):
-            #             print(base.id)
-
-
-                    # print(base)
-                    # print(base.attr)
-                    # print(base.value.attr)
-                    # print(base.ctx)
-
-
-
 
 
     def test_examples(self, examples):

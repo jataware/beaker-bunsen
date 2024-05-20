@@ -255,3 +255,40 @@ class CorpusResourceScheme(Scheme):
         if parsed_uri.scheme != cls.URI_SCHEME:
             raise ValueError(f"Provided scheme '{parsed_uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
         return corpus.read_resource(parsed_uri.path)
+
+
+class RCranScheme(Scheme):
+    URI_SCHEME = "rcran-package"
+
+    local_file_cache: dict[str, str] = {}
+
+    @classmethod
+    def get_uri_for_location(
+        cls,
+        location: str,
+        base: str = "",
+    ):
+        if not (location and base):
+            raise ValueError(f"Value '{location}' in base '{base}' is not a valid rcran-package location.")
+
+        return f"{cls.URI_SCHEME}:{location}#{base}"
+
+    @classmethod
+    def read(
+        cls,
+        uri: str,
+        *args,
+        **kwargs,
+    ):
+        from .code_library_loader import RCRANLocalCache
+        parsed_uri = urlparse(uri)
+        if parsed_uri.scheme != cls.URI_SCHEME:
+            raise ValueError(f"Provided scheme '{parsed_uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
+
+        package = parsed_uri.fragment
+        subpath = parsed_uri.path
+        with RCRANLocalCache([package]) as cache:
+            target_file = Path(cache[package]) / subpath
+            with target_file.open() as source:
+                content = source.read()
+        return content

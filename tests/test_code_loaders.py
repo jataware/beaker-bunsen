@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from beaker_bunsen.vectordb.types import Resource
-from beaker_bunsen.vectordb.loaders.code_library_loader import PythonLibraryLoader, RCRANSourceLoader
+from beaker_bunsen.vectordb.loaders.code_library_loader import PythonLibraryLoader, RCRANSourceLoader, RCRANLocalCache
 
 
 def test_python_module_discovery():
@@ -101,12 +101,11 @@ def test_exclusions_base_exclusions():
 def test_r_cran_source_loader():
     loader = RCRANSourceLoader()
 
-
+    resources = list(loader.discover(locations=["leaflet"]))
 
     # TODO: More testing
 
-
-
-    assert len(loader.remote_package_cache) > 0
-    assert "leaflet" in loader.remote_package_cache
-    assert Version(loader.remote_package_cache["leaflet"]["version"]) > Version("2.0")
+    assert len(RCRANLocalCache.remote_package_cache) > 0
+    assert "leaflet" in RCRANLocalCache.remote_package_cache
+    assert Version(RCRANLocalCache.remote_package_cache["leaflet"]["version"]) > Version("2.0")
+    assert len(resources) > 0

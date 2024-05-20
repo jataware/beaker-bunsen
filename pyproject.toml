@@ -36,6 +36,9 @@ dependencies = [
 [project.entry-points.hatch]
 bunsen = "beaker_bunsen.builder.hooks"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project.urls]
 Documentation = "https://github.com/unknown/beaker-bunsen#readme"
 Issues = "https://github.com/unknown/beaker-bunsen/issues"

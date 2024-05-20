@@ -175,7 +175,6 @@ class Corpus:
                     uri_path = Path(uri_parts.path)
 
                 resource_path = Path(partition) / uri_path
-                # new_uri = f"corpus:{corpus_path}"
                 new_uri = CorpusResourceScheme.get_uri_for_location(resource_path)
                 content = read_from_uri(resource_uri)
                 mode = "wb" if isinstance(content, bytes) else "w"

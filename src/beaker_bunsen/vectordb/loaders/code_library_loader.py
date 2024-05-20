@@ -1,16 +1,20 @@
+import contextlib
 import importlib
 import importlib.util
 import logging
+import os
 import pkgutil
 import requests
 import sys
-from collections import deque
+import tarfile
+import tempfile
+from collections import deque, defaultdict
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from .base import BaseLoader
-from .schemes import LocalFileScheme, PythonModuleScheme, read_from_uri
+from .schemes import LocalFileScheme, PythonModuleScheme, RCranScheme, read_from_uri
 from ..types import Resource, Default, DefaultType
 
 logger = logging.getLogger("beaker_bunsen")
@@ -19,6 +23,17 @@ class BaseCodeLoader(BaseLoader):
 
     Scheme = LocalFileScheme
     # URI_SCHEME = "file"
+
+    def read(
+            self,
+            location: str,
+            base: str = ""
+        ):
+        if location.startswith(self.Scheme.URI_SCHEME):
+            uri = location
+        else:
+            uri = self.Scheme.get_uri_for_location(location, base)
+        return read_from_uri(uri)
 
 
 class PythonLibraryLoader(BaseCodeLoader):
@@ -105,36 +120,76 @@ class PythonLibraryLoader(BaseCodeLoader):
             yield resource
 
 
-    def read(
-            self,
-            location: str,
-            base: str = ""
-        ):
-        if location.startswith(self.Scheme.URI_SCHEME):
-            uri = location
-        else:
-            uri = self.Scheme.get_uri_for_location(location, base)
-        return read_from_uri(uri)
+class RCRANLocalCache(contextlib.AbstractContextManager):
+    # Class attributes
+    remote_package_cache: dict[str, dict[str, str]] = {}
+    local_package_cache: dict[str, str] = {}
+    tempdir_context_holder: dict[str, contextlib.AbstractContextManager] = {}
+    ref_counts: dict[str, int] = defaultdict(lambda: 0)
 
+    # Instance/context attributes
+    repo: str
+    context_locations: list[str]
 
-class RCRANSourceLoader(BaseCodeLoader):
-    REPO: str = "https://cran.rstudio.com/src/contrib"
+    def __init__(self, locations: list[str], repo="https://cran.rstudio.com/src/contrib") -> None:
+        self.repo = repo
+        self.context_locations = locations
+        if not self.remote_package_cache:
+            self.build_package_cache()
 
-    remote_package_cache: dict[str, Any] | None = {}
-    local_package_cache: dict[str, str] | None = {}
+    def __enter__(self) -> dict[str, str]:
+        results = {}
+        for location in self.context_locations:
 
-    def __init__(
-        self,
-        locations: list[str] | None = None,
-        metadata: dict | None = None,
-        exclusions: list[str] | None = None
-    ) -> None:
-        self.build_package_cache()
-        super().__init__(locations, metadata, exclusions)
+            # Return the cached if it exists
+            existing_cache = self.local_package_cache.get(location, None)
+            if existing_cache and os.path.isdir(existing_cache):
+                results[location] = existing_cache
+                continue
 
-    @classmethod
-    def build_package_cache(cls):
-        package_page = f"{cls.REPO}/PACKAGES"
+            self.ref_counts[location] += 1
+            if '@' in location:
+                package_name, version = location.split("@", maxsplit=1)
+            else:
+                package = self.remote_package_cache.get(location, None)
+                if not package:
+                    raise LookupError(f"Unable to find CRAN package name '{location}'")
+                package_name = package["package"]
+                version = package["version"]
+
+            source_tarball_url = f"{self.repo}/{package_name}_{version}.tar.gz"
+            tarball_req = requests.get(source_tarball_url, stream=True)
+
+            context_mgr = tempfile.TemporaryDirectory()
+            tmpdir = context_mgr.__enter__()
+            results[location] = tmpdir
+            self.tempdir_context_holder[location] = context_mgr
+            self.local_package_cache[location] = tmpdir
+
+            tar_file = tarfile.open(mode="r:gz", fileobj=tarball_req.raw)
+            tar_file.extractall(path=tmpdir)
+        return results
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Update ref counts for local context
+        for location in self.context_locations:
+            self.ref_counts[location] -= 1
+        # Clean up if there are no references
+        locations_to_cleanup = [
+            location
+            for location, ref_count in self.ref_counts.items()
+            if ref_count == 0
+        ]
+        for location in locations_to_cleanup:
+            context_mgr = self.tempdir_context_holder[location]
+            context_mgr.__exit__(exc_type, exc_value, traceback)
+            del self.tempdir_context_holder[location]
+            del self.local_package_cache[location]
+            del self.ref_counts[location]
+        return super().__exit__(exc_type, exc_value, traceback)
+
+    def build_package_cache(self):
+        package_page = f"{self.repo}/PACKAGES"
         package_req = requests.get(package_page)
         package_content = package_req.text
         packages = {}
@@ -154,7 +209,26 @@ class RCRANSourceLoader(BaseCodeLoader):
             except ValueError:
                 raise
             current_package[label] = value
-        cls.remote_package_cache = packages
+        self.remote_package_cache.clear()
+        self.remote_package_cache.update(packages)
+
+
+class RCRANSourceLoader(BaseCodeLoader):
+    REPO: str = "https://cran.rstudio.com/src/contrib"
+    SLUG: str = "rcran"
+
+    Scheme = RCranScheme
+
+    remote_package_cache: dict[str, Any] | None = {}
+    local_package_cache: dict[str, str] | None = {}
+
+    def __init__(
+        self,
+        locations: list[str] | None = None,
+        metadata: dict | None = None,
+        exclusions: list[str] | None = None
+    ) -> None:
+        super().__init__(locations, metadata, exclusions)
 
     def discover(
         self,
@@ -179,31 +253,27 @@ class RCRANSourceLoader(BaseCodeLoader):
         locations, parsed_exclusions = self.parse_locations(locations)
         exclusions.extend(parsed_exclusions)
 
-        for location in locations:
-            if '@' in location:
-                package_name, version = location.split("@", maxsplit=1)
-            else:
-                package = self.remote_package_cache.get(location, None)
-                if not package:
-                    raise LookupError(f"Unable to find CRAN package name '{location}'")
-                package_name = package["package"]
-                version = package["version"]
+        with RCRANLocalCache(locations=locations) as cache:
+            for location, tempdir in cache.items():
+                for dirpath, _dirnames, filenames in os.walk(top=tempdir):
+                    for filename in filenames:
+                        if filename.startswith('.'):
+                            continue
+                        full_path = Path(os.path.join(dirpath, filename))
+                        # Only load in R library files, which are found in a suddirectory named `R` and have extension `.R`
+                        # Glob equivalent: `**/R/**.R`
+                        if not ("R" in full_path.parts and full_path.suffix == ".R"):
+                            continue
 
-            source_tarball_url = f"{self.REPO}/{package_name}_{version}.tgz"
-            # TODO: Read and decompress tarball. Iterate over files.
-
-
-    def read(
-        self,
-        location: str,
-        base: str = "",
-    ):
-        return ""
-
-
-# class GithubLoader(BaseCodeLoader):
-#     def discover(self, locations: list[str], metadata: dict = None, *args, **kwargs):
-#         return super().discover(locations, metadata, *args, **kwargs)
-
-#     def load(self, location: str):
-#         return super().load(location)
+                        sub_path = full_path.relative_to(tempdir)
+                        with open(full_path, 'r') as fh:
+                            content = fh.read()
+                            fh.seek(0)
+                            resource = Resource(
+                                uri=self.Scheme.get_uri_for_location(base=location, location=str(sub_path)),
+                                file_handle=fh,
+                                content=content,
+                                metadata=metadata
+                            )
+                            resource.id = self.get_id_for_resource(resource)
+                            yield resource
