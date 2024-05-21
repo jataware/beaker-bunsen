@@ -103,11 +103,6 @@ def extract_examples(locations: list[str]):
         except:
             pass
 
-        # TODO: Remove this
-        print(os.listdir(dest))
-        print(f"Num: {num}")
-        print(existing_example_nums)
-
         for resource in resource_list:
             if resource.content:
                 content = resource.content
