@@ -30,8 +30,11 @@ dependencies = [
   "tiktoken~=0.5.2",
   "marko~=2.0.3",
   "hatchling",
+  "click~=8.1.7",
 ]
-  # "pysqlite3-binary~=0.5.2",
+
+[project.scripts]
+bunsen= "beaker_bunsen.scripts.bunsen:cli"
 
 [project.entry-points.hatch]
 bunsen = "beaker_bunsen.builder.hooks"

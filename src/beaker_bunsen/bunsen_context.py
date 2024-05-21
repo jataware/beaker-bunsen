@@ -91,9 +91,15 @@ class BunsenContext(BaseContext):
             state: dict[str,any],
             code_examples: list[str] = None,
         ) -> str:
-        variables = state.get("variables", {})
-        modules = state.get("modules", {})
-        functions = state.get("functions", {})
+        if state:
+            variables = state.get("variables", {})
+            modules = state.get("modules", [])
+            functions = state.get("functions", {})
+        else:
+            variables = {}
+            modules = []
+            functions = []
+
 
         python_libraries = self.bunsen_config.get("python_libraries", [])
         if len(python_libraries) > 1:
@@ -102,8 +108,15 @@ class BunsenContext(BaseContext):
             python_library_str = f"Python library {python_libraries[0]}"
         else:
             python_library_str = None
+        r_cran_libraries = self.bunsen_config.get("r_cran_libraries", [])
+        if len(r_cran_libraries) > 1:
+            r_cran_library_str = f"r_cran libraries {', '.join(r_cran_libraries)}"
+        elif len(r_cran_libraries) == 1:
+            r_cran_library_str = f"r_cran library {r_cran_libraries[0]}"
+        else:
+            r_cran_library_str = None
 
-        library_str = " and ".join([python_library_str, ])
+        library_str = " and ".join(libs for libs in (python_library_str, r_cran_library_str) if libs)
         submodule_description = None
         code_example_str = "\n".join(
             """
