@@ -3,8 +3,10 @@ import datetime
 import json
 import os
 import os.path
+import re
 import toml
 from collections import defaultdict
+from functools import reduce
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -112,15 +114,21 @@ def extract_examples(locations: list[str]):
                 else:
                     content = read_from_uri(resource.uri)
 
+            content_lines = content.splitlines(keepends=True)
             prompt = """
 A document is provided below. It contains line numbers on the left, the content on the right, with the sides separated by ` : `.
 The provided document may be a source code file, a documentation page, an executable notebook, or hand extracted examples created by hand.
 It may contain one or more curated examples as for how to accomplish something using relevant libraries.
-Please identify any such examples and generate a short description of the purpose of the example code, along with the line number on which it occurs.
+Please identify any such examples and generate a short description of the purpose of the example code, along with the start/stop line numbers (inclusive) where the example occurs.
+For example, if the example is a single line on the line labeled 34, both `start_line` and `stop_line` would be equal to 34.
+If the example was spread of 5 lines, starting at line 12, the values would be `start_line` = 12, `stop_line` = 16.
 Also, make sure to include a prelude of code that contains any imports or definitions needed so the example is as complete as possible and has everything it needs to run as a stand-alone code block.
 The prelude will later be combined with the example to help use the libraries these documents are related to.
 Please ensure that all imports and definitions in the prelude are complete. Do not use statements like "put your code here..." or summarize what should be done.
 Do not identify/extract regular source code from files as examples. Only extract unique tasks that demonstrate how to properly use the library.
+That is, all exracted examples should show usage of functions, not just the code that defines a function. Assume the user will be able to look up argument and parameter information.
+You should err on the side of fewer, more complete examples which show an entire "step" of work rather than examples of subtasks.
+As an example, if you find sample code where a dataset is sorted and a comparison function is defined to help sort, only extract one example that includes all the code. Do not create a separate example of how to define a comparison function.
 If you do not find any examples in the document, do not generate one yourself. Instead return an empty list.
 
 Please be sure to format your answer in json format as response object that matches this format with one object per example object in the `examples` list:
@@ -140,7 +148,7 @@ The document from which to extract begins below this line and runs until the end
 
             full_prompt = "\n".join([
                 prompt,
-                "".join(f"{line_no:6} : {line}" for line_no, line in enumerate(content.splitlines(keepends=True), start=1)),
+                "".join(f"{line_no:6} : {line}" for line_no, line in enumerate(content_lines, start=1)),
             ])
             model = "gpt-4o"
 
@@ -190,8 +198,8 @@ The document from which to extract begins below this line and runs until the end
                         f"\n{'====' * 20}\n"
                         f"{err}\n{err.msg}\n"
                     )
-
                 continue
+
             if not example_list:
                 continue
 
@@ -201,7 +209,11 @@ The document from which to extract begins below this line and runs until the end
                 example_metadata_filename = f"{example_filename}.metadata"
                 start = int(example["start_line"]) - 1
                 stop = int(example["stop_line"])
-                example_code = "".join(content.splitlines(keepends=True)[start:stop])
+                prelude_lines = example.get("prelude", "").splitlines(keepends=True)
+                prelude = clean_codeblock(prelude_lines) if prelude_lines else ""
+                example_code_lines = content_lines[start:stop]
+                example_code = clean_codeblock(example_code_lines)
+
                 example_metadata = {
                     **metadata,
                     "start_line": start,
@@ -215,7 +227,7 @@ The document from which to extract begins below this line and runs until the end
 
 # Code
 ```
-{example["prelude"]}
+{prelude}
 {example_code}
 ```
 """.lstrip())
@@ -223,3 +235,44 @@ The document from which to extract begins below this line and runs until the end
 
             # Iterate source file num for next loop
             num += 1
+
+
+def should_ignore_line(line: str) -> bool:
+    """
+    Returns a boolean as to whether a particular line should be kept or ignored when importing code.
+    We should ignore extraneous whitespace, code-block indicators, decorative lines, etc that do are not semantically
+    meaningful.
+    """
+    # Todo: Other leading/trailing lines we need to clean?
+    if (
+        re.search(r'\S', line) == None  # Line does not contain at least one non-whitespace character
+        or line.startswith('```')
+    ):
+        return True
+    return False
+
+
+def clean_codeblock(code: list[str]) -> str:
+    if not code:
+        return ""
+    top, bottom = 0, len(code) - 1
+    while should_ignore_line(code[top]) and top < len(code) - 1:
+        top += 1
+    while should_ignore_line(code[bottom]) and bottom > top:
+        bottom -= 1
+    split_lines = [re.split(r'(\s)', line) for line in code[top:bottom]]
+    line_count = len(split_lines)
+    vertical_parts = list(zip(*split_lines))
+    for idx, section in enumerate(vertical_parts):
+        correct_size = len(section) == line_count
+        all_match, _ = reduce(
+            lambda match_tuple, next_val: (match_tuple[1] == next_val, match_tuple[1]),
+            section,
+            (True, section[0])
+        )
+        if not (correct_size and all_match):
+            break
+    else:
+        idx = None
+    unprefixed_lines = ["".join(split_line[idx:]) for split_line in split_lines]
+    return "".join(unprefixed_lines)
