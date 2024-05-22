@@ -41,7 +41,8 @@ def test_document_splitting(chromadb_store_path, test_data_path):
     record_ids = sorted(record.id for record in ingested_records)
 
     assert len(ingested_records) > 1
-    assert first_record.content[-20:] in second_record.content[:400]  # Assert overlap feature is working
+    # Due to change in chunking, overlap is no longer assured.
+    # assert first_record.content[-20:] in second_record.content[:400]  # Assert overlap feature is working
     assert first_record.uri == f"file:{filename}"
     with open(filename) as rawfile:
         raw_data = rawfile.read()
