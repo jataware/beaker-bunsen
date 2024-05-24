@@ -9,11 +9,12 @@ from abc import ABC, abstractmethod
 from functools import cache
 from pathlib import Path
 from typing import Any, TYPE_CHECKING, Type
-from urllib.parse import urlparse
 
+from ..types import URI
 if TYPE_CHECKING:
-    from ...corpus import Corpus
+    from .. import Corpus
     from .base import BaseLoader
+    from ..embedders import BaseEmbedder
 
 
 def _is_scheme(obj: Any):
@@ -32,14 +33,13 @@ def unmap_scheme(scheme: str):
             return cls
 
 
-def determine_scheme(uri: str) -> "Scheme | None":
-    uri = os.fsdecode(uri)
-    scheme = urlparse(uri).scheme
-    scheme_cls = unmap_scheme(scheme)
+def determine_scheme(uri: URI | str | Path) -> "Scheme | None":
+    uri = URI(uri)
+    scheme_cls = unmap_scheme(uri.scheme)
     if scheme_cls:
             return scheme_cls
     else:
-        raise ValueError(f"Unable to Scheme for '{scheme}'")
+        raise ValueError(f"Unable to Scheme for '{uri.scheme}'")
 
 
 def read_from_uri(
@@ -58,6 +58,11 @@ class Scheme(ABC):
     def default_loader(cls) -> "Type[BaseLoader]":
         from .local_file_loader import LocalFileLoader
         return LocalFileLoader
+
+    @classmethod
+    def default_embedder(cls) -> "Type[BaseEmbedder]":
+        from ..embedders import DocumentEmbedder
+        return DocumentEmbedder
 
     @classmethod
     @abstractmethod
@@ -103,18 +108,18 @@ class LocalFileScheme(Scheme):
     @classmethod
     def read(
         cls,
-        uri: str,
+        uri: URI | str,
         base_dir: str | Path = "",
         *args,
         **kwargs,
     ) -> bytes | str:
-        parsed_uri = urlparse(uri)
-        if parsed_uri.scheme != cls.URI_SCHEME:
-            raise ValueError(f"Provided scheme '{parsed_uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
-        if not parsed_uri.path.startswith('/'):
-            path = os.path.join(base_dir, parsed_uri.path)
+        uri = URI(uri)
+        if uri.scheme != cls.URI_SCHEME:
+            raise ValueError(f"Provided scheme '{uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
+        if not uri.path.startswith('/'):
+            path = os.path.join(base_dir, uri.path)
         else:
-            path = parsed_uri.path
+            path = uri.path
         try:
             with open(path, 'r') as resource_file:
                 result = resource_file.read()
@@ -187,11 +192,11 @@ class PythonModuleScheme(Scheme):
         *args,
         **kwargs,
     ) -> bytes | str:
-        parsed_uri = urlparse(uri)
-        if parsed_uri.scheme != cls.URI_SCHEME:
-            raise ValueError(f"Provided scheme '{parsed_uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
+        uri = URI(uri)
+        if uri.scheme != cls.URI_SCHEME:
+            raise ValueError(f"Provided scheme '{uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
 
-        mod_name = parsed_uri.path
+        mod_name = uri.path
         file_path = cls.get_module_path(mod_name)
 
         if file_path and os.path.isfile(file_path):
@@ -250,11 +255,11 @@ class ZipfileScheme(Scheme):
         *args,
         **kwargs,
     ):
-        parsed_uri = urlparse(uri)
-        if parsed_uri.scheme != cls.URI_SCHEME:
-            raise ValueError(f"Provided scheme '{parsed_uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
-        zipfile_path = parsed_uri.path
-        inner_file = parsed_uri.fragment
+        uri = URI(uri)
+        if uri.scheme != cls.URI_SCHEME:
+            raise ValueError(f"Provided scheme '{uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
+        zipfile_path = uri.path
+        inner_file = uri.fragment
         with zipfile.ZipFile(zipfile_path) as zipfile_fh:
             with zipfile_fh.open(inner_file) as inner_file_fh:
                 content = inner_file_fh.read()
@@ -286,10 +291,10 @@ class CorpusResourceScheme(Scheme):
         *args,
         **kwargs,
     ):
-        parsed_uri = urlparse(uri)
-        if parsed_uri.scheme != cls.URI_SCHEME:
-            raise ValueError(f"Provided scheme '{parsed_uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
-        return corpus.read_resource(parsed_uri.path)
+        uri = URI(uri)
+        if uri.scheme != cls.URI_SCHEME:
+            raise ValueError(f"Provided scheme '{uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
+        return corpus.read_resource(uri.path)
 
 
 class RCranScheme(Scheme):
@@ -321,12 +326,12 @@ class RCranScheme(Scheme):
         **kwargs,
     ):
         from .code_library_loader import RCRANLocalCache
-        parsed_uri = urlparse(uri)
-        if parsed_uri.scheme != cls.URI_SCHEME:
-            raise ValueError(f"Provided scheme '{parsed_uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
+        uri = URI(uri)
+        if uri.scheme != cls.URI_SCHEME:
+            raise ValueError(f"Provided scheme '{uri.scheme}' does not match expected scheme '{cls.URI_SCHEME}'.")
 
-        package = parsed_uri.fragment
-        subpath = parsed_uri.path
+        package = uri.fragment
+        subpath = uri.path
         with RCRANLocalCache([package]) as cache:
             target_file = Path(cache[package]) / subpath
             with target_file.open() as source:

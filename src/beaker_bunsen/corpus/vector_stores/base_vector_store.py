@@ -6,8 +6,10 @@ from numpy.typing import NDArray
 import logging
 import numpy as np
 
-from .types import Record, RecordBundle, QueryResponse, Resource, EmbeddingFunction
-from .loaders.base import BaseLoader
+from ..types import Record, RecordBundle, QueryResponse
+from ..protocols import EmbeddingFunction
+from ..resources import Resource
+from ..loaders.base import BaseLoader
 
 
 logger = logging.getLogger("beaker_bunsen")

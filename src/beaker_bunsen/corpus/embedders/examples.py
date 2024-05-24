@@ -4,7 +4,8 @@ from typing import Iterator
 
 import marko.md_renderer
 
-from beaker_bunsen.vectordb.types import Resource, Record
+from ..types import Record
+from ..resources import Resource
 
 from .base import BaseEmbedder
 
@@ -12,7 +13,7 @@ from .base import BaseEmbedder
 class ExampleEmbedder(BaseEmbedder):
 
     def prepare_records_from_resource(self, resource: Resource) -> Iterator[Record]:
-        content = self.read_resource(resource)
+        content = resource.read()
         try:
             tree = marko.Parser().parse(content)
         except Exception as err:

@@ -2,7 +2,8 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from ..types import Resource, Default, DefaultType
+from ..types import Default, DefaultType
+from ..resources import Resource
 
 
 class BaseLoader(ABC):
@@ -35,6 +36,8 @@ class BaseLoader(ABC):
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
         exclusions: list[str] | DefaultType = Default,
+        *args,
+        **kwargs,
     ):
         ...
 

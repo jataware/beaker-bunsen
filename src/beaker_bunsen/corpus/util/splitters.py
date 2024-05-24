@@ -34,7 +34,8 @@ from typing import (
 )
 
 from .helpers import count_tokens
-from .. import logger
+# from .logging import logger
+logger = lambda *a: a
 
 
 def _split_text_with_regex(

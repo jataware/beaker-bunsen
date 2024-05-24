@@ -1,10 +1,15 @@
-from typing import Iterator
+import logging
+from typing import Iterator, TYPE_CHECKING
 
-from .. import logger
+from ..protocols import EmbeddingFunction
 from ..loaders.base import BaseLoader
 from ..loaders.schemes import read_from_uri
-from ..types import Resource, Record, RecordBundle, EmbeddingFunction, DefaultType, Default
-from ..vector_store import VectorStore
+from ..types import Record, RecordBundle, DefaultType, Default
+from ..resources import Resource
+from ..vector_stores.base_vector_store import VectorStore
+
+
+logger = logging.getLogger("beaker_bunsen")
 
 
 class BaseEmbedder:
@@ -29,22 +34,8 @@ class BaseEmbedder:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    def read_resource(self, resource: Resource) -> str | bytes | None:
-        if resource.content:
-            return resource.content
-        elif resource.file_handle:
-            try:
-                resource.file_handle.seek(0)
-            except IOError:
-                pass
-            return resource.file_handle.read()
-        elif resource.uri:
-            return read_from_uri(resource.uri)
-        else:
-            return None
-
     def prepare_records_from_resource(self, resource: Resource) -> Iterator[Record]:
-        content = self.read_resource(resource)
+        content = resource.read()
 
         if not content:
             raise ValueError(f"Unable to determine content for resource `{resource.id}` @ `{resource.uri}`")

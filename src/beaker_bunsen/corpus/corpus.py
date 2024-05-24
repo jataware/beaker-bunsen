@@ -7,19 +7,19 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Type
 from typing_extensions import Self
-from urllib.parse import urlparse
 
-from .vectordb.chromadb_store import ChromaDBLocalStore, ZippedChromaDBStore
-from .vectordb.vector_store import VectorStore
-from .vectordb.loaders import BaseLoader, BaseCodeLoader, LocalFileLoader, PythonLibraryLoader
-from .vectordb.loaders.schemes import read_from_uri, CorpusResourceScheme
-from .vectordb.embedders import BaseEmbedder, DocumentationEmbedder
-from .vectordb.types import (
-    Record, Resource, Embedding, Image, Metadata, QueryResponse, QueryResult, RecordBundle, EmbeddingFunction,
-    DefaultType, Default,
+from .vector_stores.chromadb_store import ChromaDBLocalStore, ZippedChromaDBStore
+from .vector_stores.base_vector_store import VectorStore
+from .loaders import BaseLoader, BaseCodeLoader, LocalFileLoader, PythonLibraryLoader
+from .loaders.schemes import read_from_uri, CorpusResourceScheme
+from .embedders import BaseEmbedder, DocumentationEmbedder
+from .types import (
+    Record, Embedding, Image, Metadata, QueryResponse, QueryResult, RecordBundle,
+    DefaultType, Default, URI,
 )
-from .vectordb.util.helpers import common_path_portion
-
+from .protocols import EmbeddingFunction
+from .resources import Resource
+from .util.helpers import common_path_portion
 
 
 class Corpus:
@@ -67,6 +67,7 @@ class Corpus:
 
         store_config = config.get("store", {})
         if "default_embedding_function" in store_config:
+            print("config", store_config)
             func = EmbeddingFunction.from_uri(store_config["default_embedding_function"])
             store_config["default_embedding_function"] = func
         store = ZippedChromaDBStore(
@@ -158,7 +159,7 @@ class Corpus:
 
         partition_common_paths = {
             partition: common_path_portion([
-                urlparse(uri).path
+                uri.path
                 for uri in resources[partition]
                 if uri.startswith(("file:", "zipped-file:"))
             ])
@@ -168,11 +169,10 @@ class Corpus:
         uri_remap = {}
         for (partition, resource_set) in resources.items():
             for resource_uri in resource_set:
-                uri_parts = urlparse(resource_uri)
-                if uri_parts.scheme in ("file", "zipped-file"):
-                    uri_path = Path(uri_parts.path).relative_to(partition_common_paths[partition])
+                if resource_uri.scheme in ("file", "zipped-file"):
+                    uri_path = Path(resource_uri.path).relative_to(partition_common_paths[partition])
                 else:
-                    uri_path = Path(uri_parts.path)
+                    uri_path = Path(resource_uri.path)
 
                 resource_path = Path(partition) / uri_path
                 new_uri = CorpusResourceScheme.get_uri_for_location(resource_path)
@@ -223,11 +223,12 @@ class Corpus:
             shutil.rmtree(tmpdir)
 
     def read_resource(self, location_or_uri: str):
-        parsed_uri = urlparse(str(location_or_uri))
-        if parsed_uri.scheme and parsed_uri.scheme != CorpusResourceScheme.URI_SCHEME:
+        uri = URI(location_or_uri)
+        # parsed_uri = urlparse(str(location_or_uri))
+        if uri.scheme and uri.scheme != CorpusResourceScheme.URI_SCHEME:
             return read_from_uri(location_or_uri)
 
-        resource_location = parsed_uri.path.lstrip("/")
+        resource_location = uri.path.lstrip("/")
         full_resource_path = Path(self.resource_location) / resource_location
         with full_resource_path.open() as resource_fp:
             content = resource_fp.read()

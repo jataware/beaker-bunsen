@@ -31,6 +31,7 @@ dependencies = [
   "marko~=2.0.3",
   "hatchling",
   "click~=8.1.7",
+  "beautifulsoup4",  # Whichever vrsion is installed by jupyter via beaker-kernel
 ]
 
 [project.scripts]

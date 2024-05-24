@@ -9,9 +9,10 @@ from zipfile import ZipFile
 import chromadb
 from chromadb.api import ClientAPI
 
-from .types import Record, RecordBundle, QueryResponse, QueryResponse, EmbeddingFunction
-from .vector_store import VectorStore
-from .loaders.base import BaseLoader
+from ..types import Record, RecordBundle, QueryResponse, QueryResponse
+from ..protocols import EmbeddingFunction
+from .base_vector_store import VectorStore
+from ..loaders.base import BaseLoader
 
 
 class BaseChromaDBStore(VectorStore):

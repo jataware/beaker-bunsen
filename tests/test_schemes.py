@@ -3,11 +3,11 @@ import pytest
 import zipfile
 from pathlib import Path
 
-from beaker_bunsen.vectordb.loaders.schemes import (
+from beaker_bunsen.corpus.loaders.schemes import (
     read_from_uri,
     LocalFileScheme, PythonModuleScheme, ZipfileScheme, CorpusResourceScheme,
 )
-from beaker_bunsen.corpus import Corpus
+from beaker_bunsen.corpus.corpus import Corpus
 
 
 @pytest.fixture()
@@ -103,6 +103,9 @@ def test_load_resource_from_corpus_dir(test_data_path):
     resource_from_corpus = Path("code/requests.adapters")
 
     corpus_uri = CorpusResourceScheme.get_uri_for_location(location=str(resource_from_corpus))
+    print(corpus_uri)
+    print(corpus_path)
+    print(resource_from_corpus)
     corpus = Corpus.from_dir(corpus_path)
 
     innercontent = read_from_uri(corpus_uri, corpus=corpus)

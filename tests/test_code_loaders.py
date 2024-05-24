@@ -4,8 +4,8 @@ from packaging.version import Version
 from pathlib import Path
 from urllib.parse import urlparse
 
-from beaker_bunsen.vectordb.types import Resource
-from beaker_bunsen.vectordb.loaders.code_library_loader import PythonLibraryLoader, RCRANSourceLoader, RCRANLocalCache
+from beaker_bunsen.corpus.resources import Resource
+from beaker_bunsen.corpus.loaders.code_library_loader import PythonLibraryLoader, RCRANSourceLoader, RCRANLocalCache
 
 
 def test_python_module_discovery():

@@ -10,5 +10,5 @@ __all__ = [
     "DocumentEmbedder",
     "DocumentationEmbedder,"
     "ExampleEmbedder",
-    "PythonEmbedder"
+    "PythonEmbedder",
 ]

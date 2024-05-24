@@ -3,12 +3,12 @@ import pytest
 import zipfile
 from pathlib import Path
 
-from beaker_bunsen.vectordb.types import Resource
-from beaker_bunsen.vectordb.chromadb_store import BaseChromaDBStore, ZippedChromaDBStore
-from beaker_bunsen.vectordb.embedders import BaseEmbedder, DocumentationEmbedder, ExampleEmbedder, CodeEmbedder
-from beaker_bunsen.vectordb.loaders import LocalFileLoader, PythonLibraryLoader
-from beaker_bunsen.vectordb.loaders.schemes import read_from_uri
-from beaker_bunsen.corpus import Corpus
+from beaker_bunsen.corpus.resources import Resource
+from beaker_bunsen.corpus.vector_stores.chromadb_store import BaseChromaDBStore, ZippedChromaDBStore
+from beaker_bunsen.corpus.embedders import BaseEmbedder, DocumentationEmbedder, ExampleEmbedder, CodeEmbedder
+from beaker_bunsen.corpus.loaders import LocalFileLoader, PythonLibraryLoader
+from beaker_bunsen.corpus.loaders.schemes import read_from_uri
+from beaker_bunsen.corpus.corpus import Corpus
 
 def get_all_records_by_partition(store: BaseChromaDBStore):
     return sorted(

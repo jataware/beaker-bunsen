@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import pytest
-from beaker_bunsen.vectordb.chromadb_store import ChromaDBLocalStore, Record
+from beaker_bunsen.corpus.vector_stores.chromadb_store import ChromaDBLocalStore, Record
 
 @pytest.fixture()
 def chromadb_store(tmp_path_factory):

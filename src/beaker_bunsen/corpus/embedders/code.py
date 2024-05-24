@@ -1,13 +1,10 @@
 from typing import Iterator
-from urllib.parse import urlparse
 
-from beaker_bunsen.vectordb.loaders.base import BaseLoader
-from beaker_bunsen.vectordb.types import EmbeddingFunction
-from beaker_bunsen.vectordb.vector_store import VectorStore
+from beaker_bunsen.corpus.loaders.base import BaseLoader
+from beaker_bunsen.corpus.vector_stores.base_vector_store import VectorStore
 
-from ..types import Resource, Record
-from .base import BaseEmbedder
 from .document import DocumentEmbedder
+from ..resources import Resource
 from ..loaders.schemes import read_from_uri
 from ..util.helpers import count_words
 from ..util.splitters import RecursiveCharacterTextSplitter
@@ -20,9 +17,8 @@ class CodeEmbedder(DocumentEmbedder):
     }
 
     def get_splitter(self, resource: Resource):
-        url_parts = urlparse(resource.uri)
-        scheme = url_parts.scheme
-        path = url_parts.path
+        scheme = resource.uri.scheme
+        path = resource.uri.path
         language = self.SCHEME_MAP.get(scheme, None)
         if language and language in RecursiveCharacterTextSplitter.SEPARATORS_BY_LANGUAGE:
             return RecursiveCharacterTextSplitter.from_language(

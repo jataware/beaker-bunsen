@@ -2,11 +2,10 @@ import os
 import pytest
 from pathlib import Path
 
-from beaker_bunsen.vectordb.types import Resource
-from beaker_bunsen.vectordb.chromadb_store import ChromaDBLocalStore
-from beaker_bunsen.vectordb.embedders.base import BaseEmbedder
-from beaker_bunsen.vectordb.loaders.local_file_loader import LocalFileLoader
-from beaker_bunsen.vectordb.embedders.examples import ExampleEmbedder
+from beaker_bunsen.corpus.resources import Resource
+from beaker_bunsen.corpus.vector_stores.chromadb_store import ChromaDBLocalStore
+from beaker_bunsen.corpus.loaders.local_file_loader import LocalFileLoader
+from beaker_bunsen.corpus.embedders.examples import ExampleEmbedder
 
 @pytest.fixture()
 def chromadb_store_path(tmp_path_factory):

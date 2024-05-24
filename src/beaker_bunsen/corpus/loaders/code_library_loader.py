@@ -11,11 +11,12 @@ import tempfile
 from collections import deque, defaultdict
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from .base import BaseLoader
 from .schemes import LocalFileScheme, PythonModuleScheme, RCranScheme, read_from_uri
-from ..types import Resource, Default, DefaultType
+from . import schemes
+from ..types import Default, DefaultType
+from ..resources import Resource, CodeResource, ExampleResource, DocumentationResource
 
 logger = logging.getLogger("beaker_bunsen")
 
@@ -75,7 +76,10 @@ class PythonLibraryLoader(BaseCodeLoader):
         for module_name in locations:
             module_spec = importlib.util.find_spec(module_name)
             if module_spec is None:
-                raise ValueError(f"Module '{module_name}' is not able to be imported. Please ensure that it is listed as a requirement and that 'require-runtime-dependencies' is enabled if error encountered during build.")
+                raise ValueError(
+                    f"Module '{module_name}' is not able to be imported. Please ensure that it is listed as a "
+                    f"requirement and that 'require-runtime-dependencies' is enabled if error encountered during build."
+                )
             modules_to_collect.append(module_spec)
 
         while modules_to_collect:
@@ -110,10 +114,14 @@ class PythonLibraryLoader(BaseCodeLoader):
             else:
                 basedir = ""
 
-            resource = Resource(
+            resource = CodeResource(
                 uri=self.Scheme.get_uri_for_location(module_spec.name),
                 content=source,
-                metadata=metadata,
+                metadata={
+                    "package": module_spec.name,
+                    "type": "code",
+                    **metadata,
+                }
                 # basedir=basedir
             )
             resource.id = self.get_id_for_resource(resource)
@@ -140,6 +148,8 @@ class RCRANLocalCache(contextlib.AbstractContextManager):
     def __enter__(self) -> dict[str, str]:
         results = {}
         for location in self.context_locations:
+            # Increase ref counter to reflect usage in new context
+            self.__class__.ref_counts[location] += 1
 
             # Return the cached if it exists
             existing_cache = self.local_package_cache.get(location, None)
@@ -147,7 +157,6 @@ class RCRANLocalCache(contextlib.AbstractContextManager):
                 results[location] = existing_cache
                 continue
 
-            self.ref_counts[location] += 1
             if '@' in location:
                 package_name, version = location.split("@", maxsplit=1)
             else:
@@ -173,11 +182,11 @@ class RCRANLocalCache(contextlib.AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         # Update ref counts for local context
         for location in self.context_locations:
-            self.ref_counts[location] -= 1
+            self.__class__.ref_counts[location] -= 1
         # Clean up if there are no references
         locations_to_cleanup = [
             location
-            for location, ref_count in self.ref_counts.items()
+            for location, ref_count in self.__class__.ref_counts.items()
             if ref_count == 0
         ]
         for location in locations_to_cleanup:
@@ -185,7 +194,7 @@ class RCRANLocalCache(contextlib.AbstractContextManager):
             context_mgr.__exit__(exc_type, exc_value, traceback)
             del self.tempdir_context_holder[location]
             del self.local_package_cache[location]
-            del self.ref_counts[location]
+            del self.__class__.ref_counts[location]
         return super().__exit__(exc_type, exc_value, traceback)
 
     def build_package_cache(self):
@@ -254,26 +263,40 @@ class RCRANSourceLoader(BaseCodeLoader):
         exclusions.extend(parsed_exclusions)
 
         with RCRANLocalCache(locations=locations) as cache:
-            for location, tempdir in cache.items():
+            for package_name, tempdir in cache.items():
                 for dirpath, _dirnames, filenames in os.walk(top=tempdir):
                     for filename in filenames:
                         if filename.startswith('.'):
                             continue
                         full_path = Path(os.path.join(dirpath, filename))
-                        # Only load in R library files, which are found in a suddirectory named `R` and have extension `.R`
-                        # Glob equivalent: `**/R/**.R`
-                        if not ("R" in full_path.parts and full_path.suffix == ".R"):
+                        if "R" in full_path.parts and full_path.suffix == ".R":
+                            resource_type = CodeResource
+                            location = str(full_path.relative_to(tempdir))
+                        elif "vignettes" in full_path.parts and full_path.suffix.startswith(".R"):
+                            resource_type = ExampleResource
+                            location = str(full_path.relative_to(tempdir))
+                        elif "man" in full_path.parts and full_path.suffix.startswith(".R"):
+                            resource_type = DocumentationResource
+                            location = str(full_path.relative_to(tempdir))
+                        else:
                             continue
 
-                        sub_path = full_path.relative_to(tempdir)
                         with open(full_path, 'r') as fh:
                             content = fh.read()
                             fh.seek(0)
-                            resource = Resource(
-                                uri=self.Scheme.get_uri_for_location(base=location, location=str(sub_path)),
+                            resource = resource_type(
+                                uri=self.Scheme.get_uri_for_location(
+                                    base=package_name,
+                                    location=location,
+                                ),
                                 file_handle=fh,
                                 content=content,
-                                metadata=metadata
+                                metadata={
+                                    "package": package_name,
+                                    "path": str(full_path),
+                                    "type": resource_type.resource_type.value,
+                                    **metadata,
+                                }
                             )
                             resource.id = self.get_id_for_resource(resource)
                             yield resource

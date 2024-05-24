@@ -14,11 +14,12 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 from hatchling.plugin import hookimpl
 
 from beaker_kernel.lib.context import BaseContext
-from ..vectordb.embedders import DocumentationEmbedder, ExampleEmbedder, CodeEmbedder, PythonEmbedder
-from ..vectordb.loaders import LocalFileLoader, PythonLibraryLoader, RCRANSourceLoader
-from ..vectordb.loaders.code_library_loader import RCRANLocalCache
-from ..vectordb.chromadb_store import ZippedChromaDBStore
-from ..corpus import Corpus
+from ..corpus.corpus import Corpus
+from ..corpus.resources import ResourceType
+from ..corpus.embedders import DocumentationEmbedder, ExampleEmbedder, CodeEmbedder, PythonEmbedder
+from ..corpus.loaders import LocalFileLoader, PythonLibraryLoader, RCRANSourceLoader
+from ..corpus.loaders.code_library_loader import RCRANLocalCache
+from ..corpus.vector_stores.chromadb_store import ZippedChromaDBStore
 
 
 logger = logging.getLogger("bunsen_build")
@@ -104,46 +105,50 @@ class BunsenHook(BuildHookInterface):
         python_libraries = self.config.get("python_libraries", [])
         r_cran_libraries = self.config.get("r_cran_libraries", [])
 
-        if documentation_path and os.path.exists(documentation_path):
-            corpus.ingest(
-                embedder_cls=DocumentationEmbedder,
-                loader=LocalFileLoader(locations=[documentation_path]),
-                partition="documentation",
-            )
-
-        if examples_path and os.path.exists(examples_path):
-            corpus.ingest(
-                embedder_cls=ExampleEmbedder,
-                loader=LocalFileLoader(locations=[examples_path]),
-                partition="examples",
-            )
-
-        if python_libraries:
-            corpus.ingest(
-                embedder_cls=PythonEmbedder,
-                loader=PythonLibraryLoader(locations=python_libraries, metadata={"language": "python"}),
-                partition="code"
-            )
-
-        if r_cran_libraries:
-            with RCRANLocalCache(locations=r_cran_libraries):
+        with RCRANLocalCache(locations=r_cran_libraries) as cache:
+            if r_cran_libraries:
                 corpus.ingest(
                     embedder_cls=CodeEmbedder,
-                    loader=RCRANSourceLoader(locations=r_cran_libraries, metadata={"language": "r"}),
+                    loader=RCRANSourceLoader(
+                        locations=[*r_cran_libraries, "!/man", "!/vignettes"],
+                        metadata={"language": "r"}
+                    ),
                     partition="code",
                 )
 
-        examples = corpus.store.get_all(partition="examples")
-        if examples:
-            failures = self.test_examples(examples)
-            if failures and not self.config.get("ignore_example_errors", False):
-                # TODO: Finish this
-                # TODO: Should example testing just be in the ExampleEmbedder durring embedding instead of here?
-                print("These examples failed")
-                print(failures)
-                raise BuildError("Example test failed and not ignored.")
+            if documentation_path and os.path.exists(documentation_path):
+                corpus.ingest(
+                    embedder_cls=DocumentationEmbedder,
+                    loader=LocalFileLoader(locations=[documentation_path], resource_type=ResourceType.Documentation),
+                    partition="documentation",
+                )
 
-        corpus.save_to_dir(corpus_path, overwrite=True)
+            if examples_path and os.path.exists(examples_path):
+                corpus.ingest(
+                    embedder_cls=ExampleEmbedder,
+                    loader=LocalFileLoader(locations=[examples_path], resource_type=ResourceType.Example),
+                    partition="examples",
+                )
+
+            if python_libraries:
+                corpus.ingest(
+                    embedder_cls=PythonEmbedder,
+                    loader=PythonLibraryLoader(locations=python_libraries, metadata={"language": "python"}),
+                    partition="code"
+                )
+
+
+            examples = corpus.store.get_all(partition="examples")
+            if examples:
+                failures = self.test_examples(examples)
+                if failures and not self.config.get("ignore_example_errors", False):
+                    # TODO: Finish this
+                    # TODO: Should example testing just be in the ExampleEmbedder durring embedding instead of here?
+                    print("These examples failed")
+                    print(failures)
+                    raise BuildError("Example test failed and not ignore-test-fail not set.")
+
+            corpus.save_to_dir(corpus_path, overwrite=True)
 
         return corpus_path
 

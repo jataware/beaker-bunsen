@@ -1,5 +1,5 @@
 import pytest
-from beaker_bunsen.vectordb.util.helpers import count_words, extract_md_codeblocks, extract_json, common_path_portion
+from beaker_bunsen.corpus.util.helpers import count_words, extract_md_codeblocks, extract_json, common_path_portion
 
 
 def test_word_count():

@@ -6,7 +6,8 @@ from typing import Optional
 
 from .base import BaseLoader
 from .schemes import LocalFileScheme, read_from_uri
-from ..types import Resource, Default, DefaultType
+from ..types import Default, DefaultType
+from ..resources import Resource, ResourceType, get_resource_cls
 
 
 class LocalFileLoader(BaseLoader):
@@ -19,13 +20,16 @@ class LocalFileLoader(BaseLoader):
         locations: list[str] | None = None,
         metadata: dict | None = None,
         exclusions: list[str] | None = None,
+        resource_type: ResourceType = ResourceType.Generic,
     ):
         exclusions = exclusions or []
         if locations:
             locations, parsed_exclusions = self.parse_locations(locations)
             exclusions.extend(parsed_exclusions)
             self._check_locations_exist(locations)
+        self.resource_type = resource_type
         super().__init__(locations, metadata, exclusions)
+
 
     @staticmethod
     def _check_locations_exist(locations: list[str]):
@@ -50,7 +54,8 @@ class LocalFileLoader(BaseLoader):
         self,
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
-        exclusions: list[str] = Default,
+        exclusions: list[str] | DefaultType = Default,
+        resource_type: ResourceType | DefaultType = Default
     ):
         # Initialize exclusions first so we can extend it if there are any negated locations
         if exclusions is Default:
@@ -71,6 +76,9 @@ class LocalFileLoader(BaseLoader):
         if metadata is Default:
             metadata = {}
             metadata.update(self.metadata)
+
+        if resource_type is Default:
+            resource_type = self.resource_type
 
         locations_queue = deque((location, [metadata]) for location in locations)
         while locations_queue:
@@ -104,7 +112,8 @@ class LocalFileLoader(BaseLoader):
 
                 metadata = self.collapse_metadata(location_metadata)
                 with open(location, 'r') as doc:
-                    resource = Resource(uri=self.Scheme.get_uri_for_location(location), file_handle=doc, metadata=metadata)
+                    resource_cls: type[Resource] = get_resource_cls(resource_type)
+                    resource = resource_cls(uri=self.Scheme.get_uri_for_location(location), file_handle=doc, metadata=metadata)
                     resource.id = self.get_id_for_resource(resource)
                     yield resource
 

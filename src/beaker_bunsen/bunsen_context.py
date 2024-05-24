@@ -19,7 +19,7 @@ from beaker_kernel.lib.subkernels.python import PythonSubkernel
 from beaker_kernel.lib.utils import action
 
 from .bunsen_agent import BunsenAgent
-from .corpus import Corpus
+from .corpus.corpus import Corpus
 
 if TYPE_CHECKING:
     from beaker_kernel.kernel import LLMKernel

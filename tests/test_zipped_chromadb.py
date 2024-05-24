@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from zipfile import ZipFile
 
-from beaker_bunsen.vectordb.chromadb_store import ChromaDBLocalStore, Record, ZippedChromaDBStore
+from beaker_bunsen.corpus.vector_stores.chromadb_store import ChromaDBLocalStore, Record, ZippedChromaDBStore
 
 @pytest.fixture()
 def chromadb_store(test_temp_path):

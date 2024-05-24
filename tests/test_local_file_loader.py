@@ -2,9 +2,9 @@ import os
 import pytest
 from pathlib import Path
 
-from beaker_bunsen.vectordb.types import Resource
-from beaker_bunsen.vectordb.loaders.local_file_loader import LocalFileLoader
-from beaker_bunsen.vectordb.loaders.schemes import LocalFileScheme
+from beaker_bunsen.corpus.resources import Resource
+from beaker_bunsen.corpus.loaders.local_file_loader import LocalFileLoader
+from beaker_bunsen.corpus.loaders.schemes import LocalFileScheme
 
 
 @pytest.fixture()

@@ -1,11 +1,12 @@
 from typing import Iterator, Type
 
-from beaker_bunsen.vectordb.loaders.base import BaseLoader
-from beaker_bunsen.vectordb.types import EmbeddingFunction
-from beaker_bunsen.vectordb.vector_store import VectorStore
+from beaker_bunsen.corpus.loaders.base import BaseLoader
+from beaker_bunsen.corpus.vector_stores.base_vector_store import VectorStore
 
-from ..types import Resource, Record
 from .base import BaseEmbedder
+from ..protocols import EmbeddingFunction
+from ..types import Record
+from ..resources import Resource
 from ..loaders.schemes import read_from_uri
 from ..util.helpers import count_words
 from ..util.splitters import TextSplitter, RecursiveCharacterTextSplitter

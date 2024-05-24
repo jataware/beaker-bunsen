@@ -1,6 +1,6 @@
 from typing import Iterator
 
-from ..types import Resource, Record
+from ..resources import Resource
 from .base import BaseEmbedder
 from .document import DocumentEmbedder
 from ..loaders.schemes import read_from_uri
