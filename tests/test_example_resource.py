@@ -2,10 +2,11 @@ import os
 import pytest
 from pathlib import Path
 
-from beaker_bunsen.corpus.resources import Resource
+from beaker_bunsen.corpus.resources import Resource, ExampleResource
 from beaker_bunsen.corpus.vector_stores.chromadb_store import ChromaDBLocalStore
 from beaker_bunsen.corpus.loaders.local_file_loader import LocalFileLoader
-from beaker_bunsen.corpus.embedders.examples import ExampleEmbedder
+from beaker_bunsen.corpus.embedders import Embedder
+from beaker_bunsen.corpus.corpus import Corpus
 
 @pytest.fixture()
 def chromadb_store_path(tmp_path_factory):
@@ -28,46 +29,48 @@ def chromadb_store(tmp_path_factory):
 
 
 def test_empty_example(chromadb_store):
-    embedder = ExampleEmbedder(store=chromadb_store)
-    test_resource = Resource(
-        uri="test:test",
-        content=""
-    )
 
     with pytest.raises(ValueError):
-        record = next(embedder.prepare_records_from_resource(test_resource), None)
+        test_resource = ExampleResource(
+            uri="examples:test",
+            content="",
+            content_is_complete=True,
+        )
+        record = next(test_resource.as_records(), None)
+    assert "record" not in locals()
 
 def test_missing_description(chromadb_store):
-    embedder = ExampleEmbedder(store=chromadb_store)
-    test_resource = Resource(
-        uri="test:test",
-        content="""
+    with pytest.raises(ValueError):
+        test_resource = ExampleResource(
+            uri="examples:test",
+            content="""
 # Code
 ```python
 This is my code.
 ```
-""".strip()
-    )
+    """.strip(),
+            content_is_complete=True,
+        )
 
-    with pytest.raises(ValueError):
-        record = next(embedder.prepare_records_from_resource(test_resource), None)
+        record = next(test_resource.as_records(), None)
+    assert "record" not in locals()
 
 def test_bad_markdown(chromadb_store):
     from io import BytesIO
-    embedder = ExampleEmbedder(store=chromadb_store)
-    test_resource = Resource(
-        uri="test:test",
-        content=BytesIO(b"This cannot be parsed")
-    )
-
     with pytest.raises(ValueError):
-        record = next(embedder.prepare_records_from_resource(test_resource), None)
+        test_resource = ExampleResource(
+            uri="examples:test",
+            content=BytesIO(b"This cannot be parsed"),
+            content_is_complete=True,
+        )
+        record = next(test_resource.as_records(), None)
+    assert "record" not in locals()
 
 def test_no_headings(chromadb_store):
-    embedder = ExampleEmbedder(store=chromadb_store)
-    test_resource = Resource(
-        uri="test:test",
-        content="""
+    with pytest.raises(ValueError, ):
+        test_resource = ExampleResource(
+            uri="examples:test",
+            content="""
 *This is valid markdown*
 
 ```javascript
@@ -75,15 +78,15 @@ this.is_valid()
 ```
 
 But there are no headings
-""".strip()
-    )
+""".strip(),
+            content_is_complete=True,
+        )
 
-    with pytest.raises(ValueError, ):
-        record = next(embedder.prepare_records_from_resource(test_resource), None)
+        record = next(test_resource.as_records(), None)
+    assert "record" not in locals()
 
 
 def test_valid_content(chromadb_store):
-    embedder = ExampleEmbedder(store=chromadb_store)
     content = """
 # Description
 This is a test example
@@ -94,23 +97,22 @@ This is some python code.
 ```
 
 """.strip()
-    test_resource = Resource(
-        uri="test:test",
-        content=content
+    test_resource = ExampleResource(
+        uri="examples:test",
+        content=content,
+        content_is_complete=True
     )
 
-    record = next(embedder.prepare_records_from_resource(test_resource), None)
+    record = next(test_resource.as_records(), None)
 
     assert record.content == content
 
 def test_example_ingest(test_data_paths, chromadb_store):
     loader = LocalFileLoader(locations=test_data_paths)
-    embedder = ExampleEmbedder(
-        store=chromadb_store,
-        loader=loader,
-    )
+    locations = [f"examples:{path}" for path in test_data_paths]
 
-    embedder.ingest(partition="examples")
+    corpus = Corpus(store=chromadb_store)
+    corpus.ingest(locations)
 
     resources = list(loader.discover())
     records = chromadb_store.get_all(partition="examples")

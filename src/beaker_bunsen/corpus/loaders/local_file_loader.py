@@ -2,12 +2,11 @@ import json
 import os
 from collections import deque
 from pathlib import Path
-from typing import Optional
 
 from .base import BaseLoader
 from .schemes import LocalFileScheme, read_from_uri
-from ..types import Default, DefaultType
-from ..resources import Resource, ResourceType, get_resource_cls
+from ..types import Default, DefaultType, URI
+from ..resources import Resource, ResourceType, get_resource_cls, ResourceFilter
 
 
 class LocalFileLoader(BaseLoader):
@@ -21,6 +20,7 @@ class LocalFileLoader(BaseLoader):
         metadata: dict | None = None,
         exclusions: list[str] | None = None,
         resource_type: ResourceType = ResourceType.Generic,
+        filter: ResourceFilter | None = None,
     ):
         exclusions = exclusions or []
         if locations:
@@ -28,13 +28,16 @@ class LocalFileLoader(BaseLoader):
             exclusions.extend(parsed_exclusions)
             self._check_locations_exist(locations)
         self.resource_type = resource_type
-        super().__init__(locations, metadata, exclusions)
+        super().__init__(locations, metadata, exclusions, filter)
 
 
     @staticmethod
     def _check_locations_exist(locations: list[str]):
         missing_locations = []
         for location in locations:
+            uri = URI(location)
+            if uri.scheme:
+                location = uri.path
             if isinstance(location, Path):
                 location = str(location.absolute())
             if not os.path.exists(location):
@@ -55,6 +58,7 @@ class LocalFileLoader(BaseLoader):
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
         exclusions: list[str] | DefaultType = Default,
+        filter: ResourceFilter | DefaultType = Default,
         resource_type: ResourceType | DefaultType = Default
     ):
         # Initialize exclusions first so we can extend it if there are any negated locations
@@ -80,9 +84,16 @@ class LocalFileLoader(BaseLoader):
         if resource_type is Default:
             resource_type = self.resource_type
 
+        if filter is Default:
+            filter = self.filter
+
         locations_queue = deque((location, [metadata]) for location in locations)
         while locations_queue:
             location, location_metadata = locations_queue.popleft()
+            uri = URI(location)
+            if uri.scheme:
+                location = uri.path
+
             if isinstance(location, Path):
                 location = str(location.absolute())
 
@@ -115,6 +126,8 @@ class LocalFileLoader(BaseLoader):
                     resource_cls: type[Resource] = get_resource_cls(resource_type)
                     resource = resource_cls(uri=self.Scheme.get_uri_for_location(location), file_handle=doc, metadata=metadata)
                     resource.id = self.get_id_for_resource(resource)
+                    if filter and not filter(resource):
+                        continue
                     yield resource
 
     def read(self, location: str, base: str = ""):

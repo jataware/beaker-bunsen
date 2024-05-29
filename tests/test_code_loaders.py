@@ -1,10 +1,7 @@
-import os
-import pytest
 from packaging.version import Version
-from pathlib import Path
 from urllib.parse import urlparse
 
-from beaker_bunsen.corpus.resources import Resource
+from beaker_bunsen.corpus.resources import isCodeResource, ResourceType
 from beaker_bunsen.corpus.loaders.code_library_loader import PythonLibraryLoader, RCRANSourceLoader, RCRANLocalCache
 
 
@@ -101,11 +98,30 @@ def test_exclusions_base_exclusions():
 def test_r_cran_source_loader():
     loader = RCRANSourceLoader()
 
-    resources = list(loader.discover(locations=["leaflet"]))
-
-    # TODO: More testing
+    resources = list(loader.discover(
+        locations=["jsonlite"]
+    ))
+    resource_types = set([resource.resource_type for resource in resources])
 
     assert len(RCRANLocalCache.remote_package_cache) > 0
-    assert "leaflet" in RCRANLocalCache.remote_package_cache
-    assert Version(RCRANLocalCache.remote_package_cache["leaflet"]["version"]) > Version("2.0")
+    assert "jsonlite" in RCRANLocalCache.remote_package_cache
+    assert Version(RCRANLocalCache.remote_package_cache["jsonlite"]["version"]) > Version("1.8")
     assert len(resources) > 0
+    assert resource_types == {ResourceType.Code, ResourceType.Documentation, ResourceType.Example}
+
+
+
+def test_r_cran_source_loader_w_filter():
+    loader = RCRANSourceLoader()
+
+    resources = list(loader.discover(
+        locations=["jsonlite"],
+        filter=isCodeResource,
+    ))
+    resource_types = set([resource.resource_type for resource in resources])
+
+    assert len(RCRANLocalCache.remote_package_cache) > 0
+    assert "jsonlite" in RCRANLocalCache.remote_package_cache
+    assert Version(RCRANLocalCache.remote_package_cache["jsonlite"]["version"]) > Version("1.8")
+    assert len(resources) > 0
+    assert resource_types == {ResourceType.Code,}

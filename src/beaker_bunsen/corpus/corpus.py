@@ -5,28 +5,38 @@ import yaml
 import zipfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Type
 from typing_extensions import Self
 
-from .vector_stores.chromadb_store import ChromaDBLocalStore, ZippedChromaDBStore
+from .vector_stores.chromadb_store import ZippedChromaDBStore
 from .vector_stores.base_vector_store import VectorStore
-from .loaders import BaseLoader, BaseCodeLoader, LocalFileLoader, PythonLibraryLoader
-from .loaders.schemes import read_from_uri, CorpusResourceScheme
-from .embedders import BaseEmbedder, DocumentationEmbedder
+from .loaders import BaseLoader
+from .loaders.schemes import read_from_uri, CorpusResourceScheme, unmap_scheme
+from .embedders import Embedder
 from .types import (
-    Record, Embedding, Image, Metadata, QueryResponse, QueryResult, RecordBundle,
-    DefaultType, Default, URI,
+    Record, DefaultType, Default, URI,
 )
 from .protocols import EmbeddingFunction
-from .resources import Resource
+from .resources import ResourceType
 from .util.helpers import common_path_portion
+from .util.logging import logger
+
+
+default_resource_partition_map: dict[ResourceType, str] = {
+    ResourceType.Documentation: "documentation",
+    ResourceType.Code: "code",
+    ResourceType.Example: "examples",
+}
+
+
+def batch_len(batch: dict[str, list]):
+    return sum(map(len, batch.values()))
 
 
 class Corpus:
     """
     A corpus is a single, self-contained interface for querying over documents and other records embedded in a vector database.
     """
-    embedder_map: dict[str, BaseEmbedder]
+    embedder_map: dict[str, Embedder]
 
     store: VectorStore
     default_embedding_function: EmbeddingFunction | None
@@ -67,7 +77,6 @@ class Corpus:
 
         store_config = config.get("store", {})
         if "default_embedding_function" in store_config:
-            print("config", store_config)
             func = EmbeddingFunction.from_uri(store_config["default_embedding_function"])
             store_config["default_embedding_function"] = func
         store = ZippedChromaDBStore(
@@ -82,30 +91,70 @@ class Corpus:
 
     def ingest(
             self,
-            embedder_cls: Type[BaseEmbedder],
-            loader: BaseLoader | DefaultType = Default,
-            base_metadata: dict | DefaultType = Default,
+            locations,
+            batch_size: int = 15,
             partition: str | DefaultType = Default,
-            embedding_function: EmbeddingFunction | DefaultType = Default,
-            batch_size: int | DefaultType = Default,
+            resource_partition_map: dict[ResourceType, str] = Default,
+            chunk_size: int | DefaultType = Default,
+            chunk_overlap: int | DefaultType = Default,
     ):
-        if base_metadata is Default:
-            base_metadata = {}
+        embedder = Embedder()
+        grouped_locations = defaultdict(list)
 
-        optional_kwargs = {}
-        if partition is not Default:
-            optional_kwargs["partition"] = partition
+        batch: dict[str, list[Record]] = defaultdict(list)
+        resource_record_count: dict[str, int] = defaultdict(lambda: 0)
+        batching_enabled = True
 
-        if embedding_function is Default:
-            embedding_function = self.default_embedding_function
-        if embedding_function not in (Default, None):
-            optional_kwargs["embedding_function"] = embedding_function
+        if resource_partition_map is Default:
+            resource_partition_map = default_resource_partition_map
 
-        if batch_size is not Default:
-            optional_kwargs["batch_size"] = batch_size
+        # Group locations by resource type(scheme)
+        for location in locations:
+            scheme = URI(location).scheme
+            grouped_locations[scheme].append(location)
 
-        embedder = embedder_cls(store=self.store)
-        embedder.ingest(loader=loader, metadata=base_metadata, **optional_kwargs)
+        # Ingest each resource type in turn
+        for scheme, scheme_locations in grouped_locations.items():
+            loader: BaseLoader = unmap_scheme(scheme).default_loader()
+            # Pass all locations in one call to the loader to allow for exclusions, etc
+            for resource in loader.discover(locations=scheme_locations):
+                # Split resource in to properly embedded, records, chunked/split if necessary
+                records = embedder.embed(
+                    resource,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                )
+
+                for record in records:
+                    # Enforce partition if passed in, but otherwise determine partition from resource
+                    if partition is Default:
+                        record_partition = resource_partition_map.get(resource.resource_type)
+                    else:
+                        record_partition = partition
+
+                    # Batch records by partition as a loader can generate more than one type of resource
+                    # e.g. a code library loader can generate code, documentation, and example resources
+                    batch[record_partition].append(record)
+                    resource_record_count[record_partition] += 1
+
+                    if batching_enabled and (batch_len(batch) >= batch_size):
+                        logger.debug(f"Adding intermediate batch of {batch_len(batch)} records")
+                        for record_partition, bundle in batch.items():
+                            self.store.add_records(bundle=bundle, partition=record_partition)
+                        batch.clear()
+                # Final add for anything not added in a batch above
+                if batch:
+                    logger.debug(f"Adding final batch of {batch_len(batch)} records")
+                    for record_partition, bundle in batch.items():
+                        self.store.add_records(bundle=bundle, partition=record_partition)
+                    batch.clear()
+                if resource_record_count:
+                    count_by_type_str = ", ".join(
+                        f"{count} {record_type}"
+                        for record_type, count in resource_record_count.items()
+                    )
+                    print(f"Retrieved {count_by_type_str} records from resource {resource.uri}")
+                    resource_record_count.clear()
 
     def save_to_dir(self, save_dir: str|Path, overwrite: bool = False):
         print(f"Saving to `{save_dir}`")
@@ -224,7 +273,6 @@ class Corpus:
 
     def read_resource(self, location_or_uri: str):
         uri = URI(location_or_uri)
-        # parsed_uri = urlparse(str(location_or_uri))
         if uri.scheme and uri.scheme != CorpusResourceScheme.URI_SCHEME:
             return read_from_uri(location_or_uri)
 

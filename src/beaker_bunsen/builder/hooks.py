@@ -7,34 +7,34 @@ import pathlib
 import pkgutil
 import shutil
 import sys
-from typing import Any
+from copy import deepcopy
+from typing import Any, Callable
 
-from hatchling.builders.config import BuilderConfig
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 from hatchling.plugin import hookimpl
 
 from beaker_kernel.lib.context import BaseContext
 from ..corpus.corpus import Corpus
-from ..corpus.resources import ResourceType
-from ..corpus.embedders import DocumentationEmbedder, ExampleEmbedder, CodeEmbedder, PythonEmbedder
-from ..corpus.loaders import LocalFileLoader, PythonLibraryLoader, RCRANSourceLoader
+from ..corpus.types import URI
 from ..corpus.loaders.code_library_loader import RCRANLocalCache
 from ..corpus.vector_stores.chromadb_store import ZippedChromaDBStore
 
 
 logger = logging.getLogger("bunsen_build")
 
+
 class BuildError(Exception):
     pass
 
 
-class BunsenHook(BuildHookInterface):
-    PLUGIN_NAME = "bunsen"
+class BuildConfigError(BuildError):
+    pass
 
-    _BUILD_DIR = "build"
+
+class BunsenConfig:
     _CONFIG_KEYS_TO_SAVE = [
-        "documentation_path",
-        "examples_path",
+        "documentation_paths",
+        "examples_paths",
         "python_libraries",
         "r_cran_libraries",
         "library_descriptions",
@@ -43,7 +43,73 @@ class BunsenHook(BuildHookInterface):
         "require-runtime-dependencies",
     ]
 
+    _build_config: dict[str, Any]
+    locations: list[URI]
+
+    library_descriptions: dict[str, str]
+
+    CONFIG_LOCATION_MAP: dict[str, Callable[[Any], list[str]]] = {
+        "documentation_path": lambda obj: [f"documentation:{obj}"],
+        "documentation_paths": lambda obj: [f"documentation:{loc}" for loc in obj],
+        "examples_path": lambda obj: [f"examples:{obj}"],
+        "examples_paths": lambda obj: [f"examples:{loc}" for loc in obj],
+        "python_libraries": lambda obj: [f"py-mod:{loc}" for loc in obj],
+        "r_cran_libraries": lambda obj: [f"rcran-package:{loc}" for loc in obj],
+    }
+
+
+    def __init__(self, build_config: dict[str, Any]) -> None:
+
+        if "documentation_path" in build_config and "documentation_paths" in build_config:
+            raise BuildConfigError(f"Both 'documentation_path' and 'documentation_paths' defined. Only one can be defined at a time.")
+        if "examples_path" in build_config and "examples_paths" in build_config:
+            raise BuildConfigError(f"Both 'example_path' and 'example_paths' defined. Only one can be defined at a time.")
+
+        self._build_config = deepcopy(build_config)
+        self.locations = []
+
+        for config_opt, transformer in self.CONFIG_LOCATION_MAP.items():
+            if config_opt in build_config:
+                config_value = build_config.get(config_opt)
+                locations = transformer(config_value)
+                uris = map(URI, locations)
+                self.locations.extend(uris)
+
+        self.locations.extend(map(URI, build_config.get("locations", [])))
+        self.library_descriptions = build_config.get("library_descriptions", {})
+
+    def to_json(self):
+        config_dict = {
+            key: value
+            for key, value in self._build_config.items()
+            if key in self._CONFIG_KEYS_TO_SAVE
+        }
+        missed_keys = set(self._build_config.keys()) - set(config_dict.keys()) - set(self._CONFIG_KEYS_TO_IGNORE)
+        if missed_keys:
+            missed_keys_str = "', '".join(missed_keys)
+            logger.warning(f"Notice: Config option(s) '{missed_keys_str}' were defined but are not being used.")
+        config_dict.update({
+            "build_uris": self.locations,
+        })
+
+        # Fix up singular paths for consistency
+        if "documentation_path" in config_dict:
+            config_dict["documentation_paths"] = [config_dict.pop("documentation_path")]
+        if "examples_path" in config_dict:
+            config_dict["examples_paths"] = [config_dict.pop("examples_path")]
+
+        return config_dict
+
+
+class BunsenHook(BuildHookInterface):
+    PLUGIN_NAME = "bunsen"
+    _BUILD_DIR = "build"
+
+    bunsen_config: BunsenConfig
+
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
+
+        self.bunsen_config = BunsenConfig(self.config)
 
         if "shared-data" not in build_data:
             build_data["shared_data"] = {}
@@ -67,22 +133,10 @@ class BunsenHook(BuildHookInterface):
                     # Add beaker context json file(s)
                     build_data["shared_data"][context_file_path] = f"share/beaker/contexts/{context_slug}.json"
 
-                # TODO: Do we need to filter like this? Should we just filter out the most common build options and
-                # include everything else?
-                bunsen_config = {
-                    key: value
-                    for key, value in self.config.items()
-                    if key in self._CONFIG_KEYS_TO_SAVE
-                }
-                missed_keys = set(self.config.keys()) - set(bunsen_config.keys()) - set(self._CONFIG_KEYS_TO_IGNORE)
-                if missed_keys:
-                    missed_keys_str = "', '".join(missed_keys)
-                    logger.warning(f"Notice: Config option(s) '{missed_keys_str}' were defined but are not being used.")
-
                 bunsen_config_path =  os.path.join(self._BUILD_DIR, "bunsen_config.json")
                 target = f"share/beaker/bunsen/{context_slug}.json"
                 with open(bunsen_config_path, "w") as bunsen_config_file:
-                    json.dump(bunsen_config, bunsen_config_file)
+                    json.dump(self.bunsen_config.to_json(), bunsen_config_file)
                 build_data["shared_data"][bunsen_config_path] = target
 
 
@@ -100,54 +154,15 @@ class BunsenHook(BuildHookInterface):
         store = ZippedChromaDBStore(path=store_path)
         corpus = Corpus(store=store)
 
-        documentation_path = self.config.get("documentation_path", "documentation")
-        examples_path = self.config.get("examples_path", "examples")
-        python_libraries = self.config.get("python_libraries", [])
-        r_cran_libraries = self.config.get("r_cran_libraries", [])
-
-        with RCRANLocalCache(locations=r_cran_libraries) as cache:
-            if r_cran_libraries:
-                corpus.ingest(
-                    embedder_cls=CodeEmbedder,
-                    loader=RCRANSourceLoader(
-                        locations=[*r_cran_libraries, "!/man", "!/vignettes"],
-                        metadata={"language": "r"}
-                    ),
-                    partition="code",
-                )
-
-            if documentation_path and os.path.exists(documentation_path):
-                corpus.ingest(
-                    embedder_cls=DocumentationEmbedder,
-                    loader=LocalFileLoader(locations=[documentation_path], resource_type=ResourceType.Documentation),
-                    partition="documentation",
-                )
-
-            if examples_path and os.path.exists(examples_path):
-                corpus.ingest(
-                    embedder_cls=ExampleEmbedder,
-                    loader=LocalFileLoader(locations=[examples_path], resource_type=ResourceType.Example),
-                    partition="examples",
-                )
-
-            if python_libraries:
-                corpus.ingest(
-                    embedder_cls=PythonEmbedder,
-                    loader=PythonLibraryLoader(locations=python_libraries, metadata={"language": "python"}),
-                    partition="code"
-                )
-
-
-            examples = corpus.store.get_all(partition="examples")
-            if examples:
-                failures = self.test_examples(examples)
-                if failures and not self.config.get("ignore_example_errors", False):
-                    # TODO: Finish this
-                    # TODO: Should example testing just be in the ExampleEmbedder durring embedding instead of here?
-                    print("These examples failed")
-                    print(failures)
-                    raise BuildError("Example test failed and not ignore-test-fail not set.")
-
+        cran_libs = [
+            location.path
+            for location in self.bunsen_config.locations
+            if location.scheme == "rcran-package"
+        ]
+        with RCRANLocalCache(locations=cran_libs):
+            corpus.ingest(
+                self.bunsen_config.locations,
+            )
             corpus.save_to_dir(corpus_path, overwrite=True)
 
         return corpus_path

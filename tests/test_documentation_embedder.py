@@ -2,10 +2,9 @@ import os
 import pytest
 from pathlib import Path
 
-from beaker_bunsen.corpus.resources import Resource
 from beaker_bunsen.corpus.vector_stores.chromadb_store import ChromaDBLocalStore
-from beaker_bunsen.corpus.loaders.local_file_loader import LocalFileLoader
-from beaker_bunsen.corpus.embedders.documentation import DocumentationEmbedder
+from beaker_bunsen.corpus.corpus import Corpus
+from beaker_bunsen.corpus.types import URI
 
 
 @pytest.fixture()
@@ -24,44 +23,40 @@ def test_data_paths(test_data_path):
 
 def test_document_splitting(chromadb_store_path, test_data_path):
     # Only load the first file in the documentation directory
-    filename = str(test_data_path / (os.listdir(test_data_path))[0])
-    loader = LocalFileLoader(locations=[filename])
+    fileuri = URI(f"documentation:{test_data_path / (os.listdir(test_data_path))[0]}")
     store = ChromaDBLocalStore(path=chromadb_store_path)
-    embedder = DocumentationEmbedder(
-        loader=loader,
-        store=store,
+    corpus = Corpus(store)
+    corpus.ingest(
+        locations=[fileuri],
         chunk_size=400,
         chunk_overlap=80,
     )
 
-    embedder.ingest()
-
-    ingested_records = sorted(store.get_all(), key=lambda record: record.id)
+    ingested_records = sorted(store.get_all(partition="documentation"), key=lambda record: record.id)
     first_record, second_record = ingested_records[:2]
     record_ids = sorted(record.id for record in ingested_records)
 
     assert len(ingested_records) > 1
     # Due to change in chunking, overlap is no longer assured.
     # assert first_record.content[-20:] in second_record.content[:400]  # Assert overlap feature is working
-    assert first_record.uri == f"file:{filename}"
-    with open(filename) as rawfile:
+
+    assert first_record.uri.path == fileuri.path
+    with open(fileuri.path) as rawfile:
         raw_data = rawfile.read()
         for record in ingested_records:
             assert record.content in raw_data
         assert raw_data.startswith(first_record.content)
-    assert record_ids[0].endswith(f"{filename}:1")
+    assert record_ids[0].endswith(f"{fileuri.path}:1")
 
 
 def test_document_embedder(chromadb_store_path, test_data_paths):
     store = ChromaDBLocalStore(path=chromadb_store_path)
-    loader = LocalFileLoader(locations=test_data_paths)
-    embedder = DocumentationEmbedder(
-        loader=loader,
-        store=store,
-    )
+    locations = [f"file:{path}" for path in test_data_paths]
+    corpus = Corpus(store)
 
     records_before_ingestion = store.get_all()
-    embedder.ingest()
+    corpus.ingest(locations=locations)
+
     ingested_records = store.get_all()
     record_ids = set(record.id for record in ingested_records)
     record_uris = set(record.uri for record in ingested_records)

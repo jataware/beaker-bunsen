@@ -3,12 +3,10 @@ import pytest
 import zipfile
 from pathlib import Path
 
-from beaker_bunsen.corpus.resources import Resource
 from beaker_bunsen.corpus.vector_stores.chromadb_store import BaseChromaDBStore, ZippedChromaDBStore
-from beaker_bunsen.corpus.embedders import BaseEmbedder, DocumentationEmbedder, ExampleEmbedder, CodeEmbedder
-from beaker_bunsen.corpus.loaders import LocalFileLoader, PythonLibraryLoader
 from beaker_bunsen.corpus.loaders.schemes import read_from_uri
 from beaker_bunsen.corpus.corpus import Corpus
+
 
 def get_all_records_by_partition(store: BaseChromaDBStore):
     return sorted(
@@ -36,14 +34,10 @@ def test_corpus_ingest(test_temp_path, test_data_path):
     corpus = Corpus(store=store)
     corpus_records_1 = get_all_records_by_partition(corpus.store)
 
-    # example_embedder = DocumentationEmbedder
-    example_loader = LocalFileLoader(locations=[test_data_path / "documentation"])
-    corpus.ingest(embedder_cls=DocumentationEmbedder, loader=example_loader, partition="documentation")
+    corpus.ingest(locations=[f"documentation:{test_data_path / 'documentation'}"])
     corpus_records_2 = get_all_records_by_partition(corpus.store)
 
-    requests_loader = PythonLibraryLoader(locations=["requests"])
-    corpus.ingest(embedder_cls=CodeEmbedder, loader=requests_loader, partition="code")
-
+    corpus.ingest(locations=["py-mod:requests"])
     corpus_records_3 = get_all_records_by_partition(corpus.store)
 
     assert len(corpus_records_1) == 0
@@ -59,12 +53,8 @@ def test_corpus_save_dir(test_temp_path, test_data_path):
 
     corpus = Corpus(store=store)
 
-    # example_embedder = DocumentationEmbedder
-    example_loader = LocalFileLoader(locations=[test_data_path / "documentation"])
-    corpus.ingest(embedder_cls=DocumentationEmbedder, loader=example_loader, partition="documentation")
-
-    requests_loader = PythonLibraryLoader(locations=["requests"])
-    corpus.ingest(embedder_cls=CodeEmbedder, loader=requests_loader, partition="code")
+    corpus.ingest(locations=[f"documentation:{test_data_path / 'documentation'}"])
+    corpus.ingest(locations=["py-mod:requests"])
 
     corpus.save_to_dir(save_dir=save_location)
 
@@ -88,12 +78,8 @@ def test_corpus_save_zip(test_temp_path, test_data_path):
 
     corpus = Corpus(store=store)
 
-    # example_embedder = DocumentationEmbedder
-    example_loader = LocalFileLoader(locations=[test_data_path / "documentation"])
-    corpus.ingest(embedder_cls=DocumentationEmbedder, loader=example_loader, partition="documentation")
-
-    requests_loader = PythonLibraryLoader(locations=["requests"])
-    corpus.ingest(embedder_cls=DocumentationEmbedder, loader=requests_loader, partition="code")
+    corpus.ingest(locations=[f"documentation:{test_data_path / 'documentation'}"])
+    corpus.ingest(locations=["py-mod:requests"])
 
     corpus.save_to_zip(save_location)
 

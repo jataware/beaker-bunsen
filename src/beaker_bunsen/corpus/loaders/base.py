@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from ..types import Default, DefaultType
-from ..resources import Resource
+from ..resources import Resource, ResourceFilter
 
 
 class BaseLoader(ABC):
@@ -13,16 +13,19 @@ class BaseLoader(ABC):
 
     locations: Optional[list[str]]
     metadata: Optional[dict]
+    filter: ResourceFilter
 
     def __init__(
             self,
             locations: list[str] | None = None,
             metadata: dict | None = None,
             exclusions: list[str] | None = None,
+            filter: ResourceFilter | None = None,
         ) -> None:
         super().__init__()
         self.exclusions = exclusions or []
         self.metadata = metadata or {}
+        self.filter = filter
         if locations:
             parsed_locations, parsed_exclusions = self.parse_locations(locations)
             self.locations = parsed_locations
@@ -36,6 +39,7 @@ class BaseLoader(ABC):
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
         exclusions: list[str] | DefaultType = Default,
+        filter: ResourceFilter | DefaultType = Default,
         *args,
         **kwargs,
     ):

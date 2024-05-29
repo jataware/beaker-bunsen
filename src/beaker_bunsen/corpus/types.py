@@ -1,7 +1,7 @@
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from numpy.typing import NDArray
-from typing import Any, Union, Sequence, TypedDict, TYPE_CHECKING, Type, Protocol, TypeAlias
+from typing import Any, Union, Sequence, TypedDict, TYPE_CHECKING, TypeAlias
 from typing_extensions import Self
 from urllib.parse import urlparse, ParseResult
 
@@ -12,18 +12,21 @@ class DefaultType:
     def __bool__(self):
         return False
 
+    def __repr__(self) -> str:
+        return 'Default'
+
 # Default sentinel for indicating that default arguments should be used
-Default = DefaultType()
+Default: DefaultType = DefaultType()
 
-RecordID = Union[str, int]
+RecordID: TypeAlias = Union[str, int]
 
-RecordContent = str
+RecordContent: TypeAlias = str
 
-NDImage = NDArray[Union[np.uint, np.int_, np.float_]]
-RawImage = Union[Sequence[int], Sequence[float]]
-Image = Union[bytearray, bytes, RawImage, NDImage]
-Metadata = dict
-Embedding = Union[Sequence[float], Sequence[int], np.ndarray]
+NDImage: TypeAlias = NDArray[Union[np.uint, np.int_, np.float_]]
+RawImage: TypeAlias = Union[Sequence[int], Sequence[float]]
+Image: TypeAlias = Union[bytearray, bytes, RawImage, NDImage]
+Metadata: TypeAlias = dict
+Embedding: TypeAlias = Union[Sequence[float], Sequence[int], np.ndarray]
 
 
 class URI(str):
@@ -72,3 +75,7 @@ class QueryResult(TypedDict):
 class QueryResponse(TypedDict):
     query: str
     matches: list[QueryResult]
+
+
+class ValidationError(ValueError):
+    pass

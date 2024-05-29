@@ -1,41 +1,15 @@
+# Note:
 # This splitting code was "borrowed" from langchain (see https://github.com/langchain-ai/langchain/blob/master/libs/text-splitters/langchain_text_splitters/character.py)
 # But it doesn't really fit with the rest of the code, so we might want to replace it in the future.
-"""**Text Splitters** are classes for splitting text.
-
-
-**Class hierarchy:**
-
-.. code-block::
-
-    BaseDocumentTransformer --> TextSplitter --> <name>TextSplitter  # Example: CharacterTextSplitter
-                                                 RecursiveCharacterTextSplitter -->  <name>TextSplitter
-
-Note: **MarkdownHeaderTextSplitter** and **HTMLHeaderTextSplitter do not derive from TextSplitter.
-
-
-**Main helpers:**
-
-.. code-block::
-
-    Document, Tokenizer, Language, LineType, HeaderType
-
-"""  # noqa: E501
+# - Matt - 2024-05-29
 
 import copy
 import re
 from abc import ABC, abstractmethod
-from typing import (
-    Any,
-    Callable,
-    Iterable,
-    List,
-    Optional,
-    TypeVar,
-)
+from typing import Any, Callable, Iterable, List, Optional
 
 from .helpers import count_tokens
-# from .logging import logger
-logger = lambda *a: a
+from .logging import logger
 
 
 def _split_text_with_regex(

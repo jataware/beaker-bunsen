@@ -2,19 +2,17 @@ import importlib
 import inspect
 import os
 import os.path
-import pkgutil
 import sys
 import zipfile
 from abc import ABC, abstractmethod
 from functools import cache
 from pathlib import Path
-from typing import Any, TYPE_CHECKING, Type
+from typing import Any, TYPE_CHECKING
 
 from ..types import URI
 if TYPE_CHECKING:
     from .. import Corpus
     from .base import BaseLoader
-    from ..embedders import BaseEmbedder
 
 
 def _is_scheme(obj: Any):
@@ -39,7 +37,7 @@ def determine_scheme(uri: URI | str | Path) -> "Scheme | None":
     if scheme_cls:
             return scheme_cls
     else:
-        raise ValueError(f"Unable to Scheme for '{uri.scheme}'")
+        raise ValueError(f"Unable to identify scheme '{uri.scheme}' in uri '{uri}'")
 
 
 def read_from_uri(
@@ -55,14 +53,9 @@ class Scheme(ABC):
     URI_SCHEME: str
 
     @classmethod
-    def default_loader(cls) -> "Type[BaseLoader]":
+    def default_loader(cls) -> "type[BaseLoader]":
         from .local_file_loader import LocalFileLoader
-        return LocalFileLoader
-
-    @classmethod
-    def default_embedder(cls) -> "Type[BaseEmbedder]":
-        from ..embedders import DocumentEmbedder
-        return DocumentEmbedder
+        return LocalFileLoader()
 
     @classmethod
     @abstractmethod
@@ -97,9 +90,9 @@ class LocalFileScheme(Scheme):
     URI_SCHEME = 'file'
 
     @classmethod
-    def default_loader(cls) -> "Type[BaseLoader]":
+    def default_loader(cls) -> "type[BaseLoader]":
         from .local_file_loader import LocalFileLoader
-        return LocalFileLoader
+        return LocalFileLoader()
 
     @classmethod
     def join_parts(cls, *parts: list[str]) -> str:
@@ -132,18 +125,30 @@ class LocalFileScheme(Scheme):
 class ExampleScheme(LocalFileScheme):
     URI_SCHEME = 'examples'
 
+    @classmethod
+    def default_loader(cls) -> "type[BaseLoader]":
+        from .local_file_loader import LocalFileLoader
+        from ..resources import ResourceType
+        return LocalFileLoader(resource_type=ResourceType.Example)
+
 
 class DocumentationScheme(LocalFileScheme):
     URI_SCHEME = 'documentation'
+
+    @classmethod
+    def default_loader(cls) -> "type[BaseLoader]":
+        from .local_file_loader import LocalFileLoader
+        from ..resources import ResourceType
+        return LocalFileLoader(resource_type=ResourceType.Documentation)
 
 
 class PythonModuleScheme(Scheme):
     URI_SCHEME = 'py-mod'
 
     @classmethod
-    def default_loader(cls) -> "Type[BaseLoader]":
+    def default_loader(cls) -> "type[BaseLoader]":
         from .code_library_loader import PythonLibraryLoader
-        return PythonLibraryLoader
+        return PythonLibraryLoader()
 
     @staticmethod
     def get_module_path(mod_name) -> str | None:
@@ -303,9 +308,9 @@ class RCranScheme(Scheme):
     local_file_cache: dict[str, str] = {}
 
     @classmethod
-    def default_loader(cls) -> "Type[BaseLoader]":
+    def default_loader(cls) -> "type[BaseLoader]":
         from .code_library_loader import RCRANSourceLoader
-        return RCRANSourceLoader
+        return RCRANSourceLoader()
 
     @classmethod
     def get_uri_for_location(

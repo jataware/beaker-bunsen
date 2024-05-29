@@ -1,10 +1,6 @@
-# -*- coding: utf-8 -*-
 import os
-import re
-from functools import reduce
-from collections import deque, defaultdict
+from collections import deque
 from pathlib import Path
-from typing import Any
 
 import tiktoken
 

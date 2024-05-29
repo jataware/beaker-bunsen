@@ -14,16 +14,14 @@ from typing import Any
 
 from .base import BaseLoader
 from .schemes import LocalFileScheme, PythonModuleScheme, RCranScheme, read_from_uri
-from . import schemes
-from ..types import Default, DefaultType
-from ..resources import Resource, CodeResource, ExampleResource, DocumentationResource
+from ..types import Default, DefaultType, URI
+from ..resources import CodeResource, ExampleResource, DocumentationResource, ResourceFilter
 
 logger = logging.getLogger("beaker_bunsen")
 
 class BaseCodeLoader(BaseLoader):
 
     Scheme = LocalFileScheme
-    # URI_SCHEME = "file"
 
     def read(
             self,
@@ -46,7 +44,8 @@ class PythonLibraryLoader(BaseCodeLoader):
         self,
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
-        exclusions: list[str] = Default,
+        exclusions: list[str] | DefaultType = Default,
+        filter: ResourceFilter | DefaultType = Default,
     ):
         """
         The `locations` should be Python packages, modules or submodules that are installed via the pyproject
@@ -67,6 +66,8 @@ class PythonLibraryLoader(BaseCodeLoader):
             metadata = self.metadata
         if exclusions is Default:
             exclusions = self.exclusions
+        if filter is Default:
+            filter = self.filter
 
         # Update or define locations and exclusions based on '!' prefix in location.
         locations, parsed_exclusions = self.parse_locations(locations)
@@ -74,6 +75,9 @@ class PythonLibraryLoader(BaseCodeLoader):
 
         modules_to_collect = deque()
         for module_name in locations:
+            uri = URI(module_name)
+            if uri.scheme:
+                module_name = uri.path
             module_spec = importlib.util.find_spec(module_name)
             if module_spec is None:
                 raise ValueError(
@@ -125,6 +129,8 @@ class PythonLibraryLoader(BaseCodeLoader):
                 # basedir=basedir
             )
             resource.id = self.get_id_for_resource(resource)
+            if filter and not filter(resource):
+                continue
             yield resource
 
 
@@ -139,9 +145,15 @@ class RCRANLocalCache(contextlib.AbstractContextManager):
     repo: str
     context_locations: list[str]
 
-    def __init__(self, locations: list[str], repo="https://cran.rstudio.com/src/contrib") -> None:
+    def __init__(
+        self,
+        locations: list[str],
+        repo="https://cran.rstudio.com/src/contrib",
+    ) -> None:
         self.repo = repo
-        self.context_locations = locations
+        self.context_locations = [
+            URI(location).path if URI(location).scheme == "rcran-package" else location for location in locations
+        ]
         if not self.remote_package_cache:
             self.build_package_cache()
 
@@ -231,19 +243,12 @@ class RCRANSourceLoader(BaseCodeLoader):
     remote_package_cache: dict[str, Any] | None = {}
     local_package_cache: dict[str, str] | None = {}
 
-    def __init__(
-        self,
-        locations: list[str] | None = None,
-        metadata: dict | None = None,
-        exclusions: list[str] | None = None
-    ) -> None:
-        super().__init__(locations, metadata, exclusions)
-
     def discover(
         self,
         locations: list[str] | DefaultType = Default,
         metadata: dict | DefaultType = Default,
-        exclusions: list[str] = Default,
+        exclusions: list[str] | DefaultType = Default,
+        filter: ResourceFilter | DefaultType = Default,
     ):
         """
         The `locations` should be R packages, as they are named in Cran with an option version number separated from the
@@ -257,6 +262,8 @@ class RCRANSourceLoader(BaseCodeLoader):
             metadata = self.metadata
         if exclusions is Default:
             exclusions = self.exclusions
+        if filter is Default:
+            filter = self.filter
 
         # Update or define locations and exclusions based on '!' prefix in location.
         locations, parsed_exclusions = self.parse_locations(locations)
@@ -299,4 +306,6 @@ class RCRANSourceLoader(BaseCodeLoader):
                                 }
                             )
                             resource.id = self.get_id_for_resource(resource)
+                            if filter and not filter(resource):
+                                continue
                             yield resource
