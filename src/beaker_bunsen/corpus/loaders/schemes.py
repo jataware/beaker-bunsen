@@ -163,6 +163,9 @@ class PythonModuleScheme(Scheme):
                 continue
             file_path = spec.origin
 
+            if file_path is None:
+                return None
+
             if os.path.isfile(file_path):
                 if tail:
                     file_path = os.path.split(file_path)[0]

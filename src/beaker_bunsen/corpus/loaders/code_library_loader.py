@@ -89,7 +89,7 @@ class PythonLibraryLoader(BaseCodeLoader):
         while modules_to_collect:
             module_spec = modules_to_collect.popleft()
 
-            if not module_spec.origin.endswith('.py'):
+            if not module_spec.origin or not module_spec.origin.endswith('.py'):
                 logger.info(f"Skipping importing non-python file {module_spec.origin}")
                 continue
 
