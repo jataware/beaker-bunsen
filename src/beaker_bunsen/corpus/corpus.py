@@ -130,7 +130,13 @@ class Corpus:
             # Pass all locations in one call to the loader to allow for exclusions, etc
             for resource in loader.discover(locations=scheme_locations):
                 # Split resource in to properly embedded, records, chunked/split if necessary
-                embedder = embedder_map.get(resource.resource_type, Embedder())
+                embedder = embedder_map.get(     # Get embedder from passed in option
+                    resource.resource_type,
+                    default_embedder_map.get(    # If doesn't exist in dict, try to get from defaults
+                        resource.resource_type,
+                        Embedder()               # Finally, default to basic Embedder
+                    )
+                )
                 records = embedder.embed(resource)
 
                 for record in records:
