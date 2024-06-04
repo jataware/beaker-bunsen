@@ -28,6 +28,19 @@ default_resource_partition_map: dict[ResourceType, str] = {
 }
 
 
+default_embedder_map: dict[ResourceType, Embedder] = {
+    ResourceType.Documentation: Embedder(
+        chunk_size=500,
+        chunk_overlap=60,
+    ),
+    ResourceType.Code: Embedder(
+        chunk_size=2000,
+        chunk_overlap=100,
+    ),
+    ResourceType.Example: Embedder(),
+}
+
+
 def batch_len(batch: dict[str, list]):
     return sum(map(len, batch.values()))
 
@@ -36,8 +49,6 @@ class Corpus:
     """
     A corpus is a single, self-contained interface for querying over documents and other records embedded in a vector database.
     """
-    embedder_map: dict[str, Embedder]
-
     store: VectorStore
     default_embedding_function: EmbeddingFunction | None
     resource_location: str | None
@@ -95,10 +106,8 @@ class Corpus:
             batch_size: int = 15,
             partition: str | DefaultType = Default,
             resource_partition_map: dict[ResourceType, str] = Default,
-            chunk_size: int | DefaultType = Default,
-            chunk_overlap: int | DefaultType = Default,
+            embedder_map: dict[ResourceType, Embedder] = Default,
     ):
-        embedder = Embedder()
         grouped_locations = defaultdict(list)
 
         batch: dict[str, list[Record]] = defaultdict(list)
@@ -107,6 +116,8 @@ class Corpus:
 
         if resource_partition_map is Default:
             resource_partition_map = default_resource_partition_map
+        if embedder_map is Default:
+            embedder_map = default_embedder_map
 
         # Group locations by resource type(scheme)
         for location in locations:
@@ -119,11 +130,8 @@ class Corpus:
             # Pass all locations in one call to the loader to allow for exclusions, etc
             for resource in loader.discover(locations=scheme_locations):
                 # Split resource in to properly embedded, records, chunked/split if necessary
-                records = embedder.embed(
-                    resource,
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                )
+                embedder = embedder_map.get(resource.resource_type, Embedder())
+                records = embedder.embed(resource)
 
                 for record in records:
                     # Enforce partition if passed in, but otherwise determine partition from resource

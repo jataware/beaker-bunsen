@@ -30,6 +30,10 @@ class Embedder:
     ):
         if embedding_function is None:
             embedding_function = self.embedding_function
+        if chunk_size is Default:
+            chunk_size = self.chunk_size
+        if chunk_overlap is Default:
+            chunk_overlap = self.chunk_overlap
         splitter = find_splitter_for_resource(resource, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         try:
             records = resource.as_records(splitter=splitter)

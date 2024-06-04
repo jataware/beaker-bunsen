@@ -17,6 +17,7 @@ from beaker_kernel.lib.context import BaseContext
 from ..corpus.corpus import Corpus
 from ..corpus.types import URI
 from ..corpus.loaders.code_library_loader import RCRANLocalCache
+from ..corpus.loaders.schemes import RCranScheme, unmap_scheme
 from ..corpus.vector_stores.chromadb_store import ZippedChromaDBStore
 
 
@@ -35,9 +36,7 @@ class BunsenConfig:
     _CONFIG_KEYS_TO_SAVE = [
         "documentation_paths",
         "examples_paths",
-        "python_libraries",
-        "r_cran_libraries",
-        "library_descriptions",
+        "libraries",
     ]
     _CONFIG_KEYS_TO_IGNORE = [
         "require-runtime-dependencies",
@@ -47,14 +46,23 @@ class BunsenConfig:
     locations: list[URI]
 
     library_descriptions: dict[str, str]
+    libraries: dict[str, dict[str, list[str]]] = {}
+
+    def library_extraction(obj: dict[str, dict[str, str]]) -> list[str]:
+        locations = []
+        for lang, entries in obj.items():
+            scheme = unmap_scheme(lang)
+            if scheme is None:
+                raise BuildError("Unknown language added")
+            locations.extend(f"{scheme.URI_SCHEME}:{location}" for location in entries.keys())
+        return locations
 
     CONFIG_LOCATION_MAP: dict[str, Callable[[Any], list[str]]] = {
         "documentation_path": lambda obj: [f"documentation:{obj}"],
         "documentation_paths": lambda obj: [f"documentation:{loc}" for loc in obj],
         "examples_path": lambda obj: [f"examples:{obj}"],
         "examples_paths": lambda obj: [f"examples:{loc}" for loc in obj],
-        "python_libraries": lambda obj: [f"py-mod:{loc}" for loc in obj],
-        "r_cran_libraries": lambda obj: [f"rcran-package:{loc}" for loc in obj],
+        "libraries": library_extraction,
     }
 
 
@@ -76,7 +84,6 @@ class BunsenConfig:
                 self.locations.extend(uris)
 
         self.locations.extend(map(URI, build_config.get("locations", [])))
-        self.library_descriptions = build_config.get("library_descriptions", {})
 
     def to_json(self):
         config_dict = {
@@ -157,7 +164,7 @@ class BunsenHook(BuildHookInterface):
         cran_libs = [
             location.path
             for location in self.bunsen_config.locations
-            if location.scheme == "rcran-package"
+            if location.scheme == RCranScheme.URI_SCHEME
         ]
         with RCRANLocalCache(locations=cran_libs):
             corpus.ingest(

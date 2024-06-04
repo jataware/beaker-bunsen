@@ -22,12 +22,25 @@ def _is_scheme(obj: Any):
         and callable(getattr(obj, "read", None))
     )
 
+
+@cache
+def all_schemes():
+    current_module = sys.modules[__name__]
+    member_list: list[tuple[str, Scheme]] = inspect.getmembers(current_module, predicate=_is_scheme)
+    classes: list[Scheme] = [cls for _, cls in member_list]
+    return classes
+
+
 @cache
 def unmap_scheme(scheme: str):
-    current_module = sys.modules[__name__]
-    for _cls_name, cls in inspect.getmembers(current_module, predicate=_is_scheme):
+    schemes = all_schemes()
+    for cls in schemes:
         cls_uri_scheme = getattr(cls, "URI_SCHEME", None)
         if cls_uri_scheme is not None and cls_uri_scheme == scheme:
+            return cls
+    # Go through a second time, checking aliases. Keeping as two loops to always prefer primary schemes over overlap with aliases.
+    for cls in schemes:
+        if scheme in cls.ALIASES:
             return cls
 
 
@@ -51,6 +64,7 @@ def read_from_uri(
 
 class Scheme(ABC):
     URI_SCHEME: str
+    ALIASES: list[str] = []
 
     @classmethod
     def default_loader(cls) -> "type[BaseLoader]":
@@ -144,6 +158,10 @@ class DocumentationScheme(LocalFileScheme):
 
 class PythonModuleScheme(Scheme):
     URI_SCHEME = 'py-mod'
+    ALIASES = [
+        "python",
+        "python3",
+    ]
 
     @classmethod
     def default_loader(cls) -> "type[BaseLoader]":
@@ -307,6 +325,12 @@ class CorpusResourceScheme(Scheme):
 
 class RCranScheme(Scheme):
     URI_SCHEME = "rcran-package"
+    ALIASES = [
+        "r_cran",
+        "rlang",
+        "r",
+        "irkernel",
+    ]
 
     local_file_cache: dict[str, str] = {}
 
