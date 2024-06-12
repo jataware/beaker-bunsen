@@ -32,7 +32,7 @@ class BuildConfigError(BuildError):
     pass
 
 
-class BunsenConfig:
+class BunsenContextConfig:
     _CONFIG_KEYS_TO_SAVE = [
         "documentation_paths",
         "examples_paths",
@@ -108,15 +108,14 @@ class BunsenConfig:
         return config_dict
 
 
-class BunsenHook(BuildHookInterface):
+class BunsenContextHook(BuildHookInterface):
     PLUGIN_NAME = "bunsen"
     _BUILD_DIR = "build"
 
-    bunsen_config: BunsenConfig
+    bunsen_config: BunsenContextConfig
 
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
-
-        self.bunsen_config = BunsenConfig(self.config)
+        self.bunsen_config = BunsenContextConfig(self.config)
 
         if "shared-data" not in build_data:
             build_data["shared_data"] = {}
@@ -219,4 +218,4 @@ class BunsenHook(BuildHookInterface):
 
 @hookimpl
 def hatch_register_build_hook():
-    return BunsenHook
+    return BunsenContextHook

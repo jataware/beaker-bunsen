@@ -34,11 +34,11 @@ dependencies = [
   "beautifulsoup4",  # Whichever vrsion is installed by jupyter via beaker-kernel
 ]
 
-[project.scripts]
-bunsen= "beaker_bunsen.scripts.bunsen:cli"
-
 [project.entry-points.hatch]
-bunsen = "beaker_bunsen.builder.hooks"
+bunsen = "beaker_bunsen.builder.bunsen_context"
+
+[tool.hatch.build.hooks.custom]
+path = "src/beaker_bunsen/builder/bunsen_package.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -70,9 +70,6 @@ cov = [
   "test-cov",
   "cov-report",
 ]
-
- # Used to call hatch_build.py
-#  [tool.hatch.build.hooks.custom]
 
 [[tool.hatch.envs.all.matrix]]
 python = ["3.10", "3.11", "3.12"]

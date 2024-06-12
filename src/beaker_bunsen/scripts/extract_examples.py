@@ -65,6 +65,9 @@ def generate_existing_example_map(
 @click.command()
 @click.argument("locations", type=str, required=False, nargs=-1)
 def extract_examples(locations: list[str]):
+    """
+    Extract examples from Bunsen config or specified locations for use in RAG
+    """
 
     dest = 'examples-unverified'
     if not os.path.exists(dest):

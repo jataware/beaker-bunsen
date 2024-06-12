@@ -23,6 +23,9 @@ from .helpers import find_pyproject_file
 @click.command()
 @click.argument("locations", type=str, required=False, nargs=-1)
 def extract_documentation(locations: list[str]):
+    """
+    Extract documentation from Bunsen config or specified locations for use in RAG
+    """
 
     dest = 'examples-unverified'
     if not os.path.exists(dest):
