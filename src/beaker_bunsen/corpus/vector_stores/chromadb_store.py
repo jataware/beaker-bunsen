@@ -194,10 +194,11 @@ class BaseChromaDBStore(VectorStore):
         partition: str | None = None,
         limit: int = -1,
         include_embeddings: bool = False,
+        filters: Any = None,
     ) -> QueryResponse:
         if not isinstance(query_string, str):
             raise ValueError(f"Argument `query_string` expected to be of type 'string'.")
-        results = self.query_multi(query_strings=[query_string], partition=partition, limit=limit, include_embeddings=include_embeddings)
+        results = self.query_multi(query_strings=[query_string], partition=partition, limit=limit, include_embeddings=include_embeddings, filters=filters)
         if results:
             return results[0]
         else:
@@ -209,6 +210,7 @@ class BaseChromaDBStore(VectorStore):
         partition: str | None = None,
         limit: int = -1,
         include_embeddings: bool = False,
+        filters: Any = None,
     ) -> Sequence[QueryResponse]:
         kwargs = {}
         if isinstance(limit, int) and limit > 0:
@@ -220,7 +222,7 @@ class BaseChromaDBStore(VectorStore):
         if include_embeddings:
             include += ["embeddings"]
         collection = self.get_collection(partition)
-        response = collection.query(query_texts=query_strings, include=include, **kwargs)
+        response = collection.query(query_texts=query_strings, include=include, where=filters, **kwargs, )
         results = self.parse_query_results(query_strings, response)
         return results
 

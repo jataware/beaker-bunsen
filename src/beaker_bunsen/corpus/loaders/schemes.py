@@ -67,7 +67,7 @@ class Scheme(ABC):
     ALIASES: list[str] = []
 
     @classmethod
-    def default_loader(cls) -> "type[BaseLoader]":
+    def default_loader(cls) -> "BaseLoader":
         from .local_file_loader import LocalFileLoader
         return LocalFileLoader()
 
@@ -104,7 +104,7 @@ class LocalFileScheme(Scheme):
     URI_SCHEME = 'file'
 
     @classmethod
-    def default_loader(cls) -> "type[BaseLoader]":
+    def default_loader(cls) -> "BaseLoader":
         from .local_file_loader import LocalFileLoader
         return LocalFileLoader()
 
@@ -140,7 +140,7 @@ class ExampleScheme(LocalFileScheme):
     URI_SCHEME = 'examples'
 
     @classmethod
-    def default_loader(cls) -> "type[BaseLoader]":
+    def default_loader(cls) -> "BaseLoader":
         from .local_file_loader import LocalFileLoader
         from ..resources import ResourceType
         return LocalFileLoader(resource_type=ResourceType.Example)
@@ -150,7 +150,7 @@ class DocumentationScheme(LocalFileScheme):
     URI_SCHEME = 'documentation'
 
     @classmethod
-    def default_loader(cls) -> "type[BaseLoader]":
+    def default_loader(cls) -> "BaseLoader":
         from .local_file_loader import LocalFileLoader
         from ..resources import ResourceType
         return LocalFileLoader(resource_type=ResourceType.Documentation)
@@ -164,7 +164,7 @@ class PythonModuleScheme(Scheme):
     ]
 
     @classmethod
-    def default_loader(cls) -> "type[BaseLoader]":
+    def default_loader(cls) -> "BaseLoader":
         from .code_library_loader import PythonLibraryLoader
         return PythonLibraryLoader()
 
@@ -179,24 +179,26 @@ class PythonModuleScheme(Scheme):
             spec = loader.find_spec(head, None)
             if not spec:
                 continue
-            file_path = spec.origin
 
-            if file_path is None:
-                return None
+            file_paths = []
+            if spec.origin is not None:
+                file_paths.append(spec.origin)
+            if isinstance(spec.submodule_search_locations, list):
+                file_paths.extend(spec.submodule_search_locations)
+            for file_path in file_paths:
+                if os.path.isfile(file_path):
+                    if tail:
+                        file_path = os.path.split(file_path)[0]
+                for submod in tail:
+                    file_path = os.path.join(file_path, submod)
 
-            if os.path.isfile(file_path):
-                if tail:
-                    file_path = os.path.split(file_path)[0]
-            for submod in tail:
-                file_path = os.path.join(file_path, submod)
+                if os.path.isdir(file_path):
+                    file_path = os.path.join(file_path, '__init__.py')
+                if not os.path.isfile(file_path) and os.path.isfile(f"{file_path}.py"):
+                    file_path = f"{file_path}.py"
 
-            if os.path.isdir(file_path):
-                file_path = os.path.join(file_path, '__init__.py')
-            if not os.path.isfile(file_path) and os.path.isfile(f"{file_path}.py"):
-                file_path = f"{file_path}.py"
-
-            if os.path.isfile(file_path):
-                return file_path
+                if os.path.isfile(file_path):
+                    return file_path
 
         # Try to get the file via internal Python methodology, but executes the parent modules(s)
         spec = importlib.util.find_spec(mod_name)
@@ -335,7 +337,7 @@ class RCranScheme(Scheme):
     local_file_cache: dict[str, str] = {}
 
     @classmethod
-    def default_loader(cls) -> "type[BaseLoader]":
+    def default_loader(cls) -> "BaseLoader":
         from .code_library_loader import RCRANSourceLoader
         return RCRANSourceLoader()
 

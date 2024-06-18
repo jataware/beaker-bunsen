@@ -10,6 +10,7 @@ import sys
 from copy import deepcopy
 from typing import Any, Callable
 
+import toml
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 from hatchling.plugin import hookimpl
 
@@ -84,6 +85,16 @@ class BunsenContextConfig:
                 self.locations.extend(uris)
 
         self.locations.extend(map(URI, build_config.get("locations", [])))
+
+    @classmethod
+    def from_pyproject_toml(cls, pyproject_file_path: str = "./pyproject.toml"):
+        with open(pyproject_file_path) as infile:
+            full_config = toml.load(infile)
+        try:
+            bunsen_config = full_config["tool"]["hatch"]["build"]["hooks"]["bunsen"]
+        except KeyError:
+            raise LookupError(f"Unable to find bunsen config in file {os.path.abspath(pyproject_file_path)}")
+        return cls(bunsen_config)
 
     def to_json(self):
         config_dict = {

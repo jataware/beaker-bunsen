@@ -45,6 +45,7 @@ class Resource:
     """
     resource_type: ResourceType = ResourceType.Generic
     default_partition: str = "default"
+    default_metadata: Metadata | None = None
 
     uri: URI
     id: RecordID | None = None
@@ -68,7 +69,11 @@ class Resource:
         self.id = id
         self.content = content
         self.file_handle = file_handle
-        self.metadata = metadata
+        if self.default_metadata:
+            self.metadata = self.default_metadata.copy()
+            self.metadata.update(metadata)
+        else:
+            self.metadata = metadata
         self.basedir = basedir
         self.content_is_complete = content_is_complete
         self.validated = False

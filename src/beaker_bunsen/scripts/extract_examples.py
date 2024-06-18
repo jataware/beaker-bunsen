@@ -10,6 +10,7 @@ from collections import defaultdict
 from functools import reduce
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import openai
 
@@ -86,35 +87,13 @@ def extract_examples(locations: list[str]):
                     sources["file"].append(source.absolute())
         if bad_sources:
             raise click.UsageError(f"source(s) {', '.join(bad_sources)} are not valid.")
-        examples_path = None
     else:
         # Get locations from config
         pyproject_file_path = find_pyproject_file()
         if pyproject_file_path:
-            with pyproject_file_path.open() as pyproject_file:
-                pyproject_config = toml.load(pyproject_file)
-            bunsen_config = pyproject_config.get("tool", {}).get("hatch", {}).get("build", {}).get("hooks", {}).get("bunsen", {})
-            sources["py-mod"].extend(
-                bunsen_config.get("python_libraries", [])
-            )
-            sources["rcran-package"].extend(
-                bunsen_config.get("r_cran_libraries", [])
-            )
-            documentation_path = bunsen_config.get("documentation_path", None)
-            if documentation_path and Path(documentation_path).exists():
-                sources["documentation"].append(
-                    documentation_path
-                )
-            examples_path = bunsen_config.get("examples_path", None)
-            # TODO: We probably shouldn't extract example from the examples, so skipping, but keeping in case we change our mind soon.
-            # if examples_path and Path(examples_path).exists():
-            #     sources["examples"].append(
-            #         examples_path
-            #         # f"examples:{examples_path}"
-            #     )
-        else:
-            examples_path = None
-
+            from beaker_bunsen.builder.bunsen_context import BunsenContextConfig
+            bunsen_config = BunsenContextConfig.from_pyproject_toml(pyproject_file_path)
+            locations = bunsen_config.locations
 
         if not pyproject_file_path or not bunsen_config:
             raise click.UsageError(f"No locations provided and unable to find a bunsen configuration in the directory tree.")
@@ -122,19 +101,24 @@ def extract_examples(locations: list[str]):
 
     with RCRANLocalCache(locations=sources["rcran-package"]):
         resource_list: list[Resource] = []
-        for scheme, scheme_locations in sources.items():
+        example_locations = [dest]
+        for location in locations:
+            uri_parts = urlparse(location)
+            scheme = uri_parts.scheme
+            # Don't extract examples from already identified/formatted examples
+            if scheme == "examples":
+                # Store example locations so we can track if found examples already exist
+                example_locations.append(uri_parts.path)
+                continue
+
             scheme_cls = unmap_scheme(scheme)
 
-            loader_cls = scheme_cls.default_loader()
-            loader = loader_cls()
+            loader = scheme_cls.default_loader()
             resource_list.extend(
-                loader.discover(scheme_locations)
+                loader.discover([location])
             )
 
-        example_locations = [dest]
-        if examples_path:
-            example_locations.append(examples_path)
-        example_map = generate_existing_example_map(example_locations)
+        example_map = generate_existing_example_map([dest])
 
         existing_example_nums = [filename.split('_')[1] for filename in os.listdir(dest)]
         num = 1

@@ -121,12 +121,13 @@ class Corpus:
 
         # Group locations by resource type(scheme)
         for location in locations:
-            scheme = URI(location).scheme
-            grouped_locations[scheme].append(location)
+            scheme_str = URI(location).scheme
+            grouped_locations[scheme_str].append(location)
 
         # Ingest each resource type in turn
-        for scheme, scheme_locations in grouped_locations.items():
-            loader: BaseLoader = unmap_scheme(scheme).default_loader()
+        for scheme_str, scheme_locations in grouped_locations.items():
+            scheme = unmap_scheme(scheme_str)
+            loader: BaseLoader = scheme.default_loader()
             # Pass all locations in one call to the loader to allow for exclusions, etc
             for resource in loader.discover(locations=scheme_locations):
                 # Split resource in to properly embedded, records, chunked/split if necessary

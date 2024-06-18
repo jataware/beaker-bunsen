@@ -89,10 +89,6 @@ class PythonLibraryLoader(BaseCodeLoader):
         while modules_to_collect:
             module_spec = modules_to_collect.popleft()
 
-            if not module_spec.origin or not module_spec.origin.endswith('.py'):
-                logger.info(f"Skipping importing non-python file {module_spec.origin}")
-                continue
-
             if getattr(module_spec, "submodule_search_locations", []):
                 subpkg_info: pkgutil.ModuleInfo = pkgutil.iter_modules(path=module_spec.submodule_search_locations)
                 subpkg_specs = (info.module_finder.find_spec(f"{module_spec.name}.{info.name}") for info in subpkg_info)
@@ -104,6 +100,10 @@ class PythonLibraryLoader(BaseCodeLoader):
                 modules_to_collect.extend(
                     subpkg_specs
                 )
+
+            if not module_spec.origin or not module_spec.origin.endswith('.py'):
+                logger.info(f"Skipping importing non-python file {module_spec.origin}")
+                continue
 
             if hasattr(module_spec, "loader"):
                 source = module_spec.loader.get_source(module_spec.name)
@@ -124,6 +124,7 @@ class PythonLibraryLoader(BaseCodeLoader):
                 metadata={
                     "package": module_spec.name,
                     "type": "code",
+                    "language": "python3",
                     **metadata,
                 }
                 # basedir=basedir
@@ -302,6 +303,7 @@ class RCRANSourceLoader(BaseCodeLoader):
                                     "package": package_name,
                                     "path": str(full_path),
                                     "type": resource_type.resource_type.value,
+                                    "language": "rlang",
                                     **metadata,
                                 }
                             )

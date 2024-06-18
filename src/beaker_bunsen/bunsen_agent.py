@@ -116,7 +116,7 @@ User's Request:
             code_generation_prompt = "\n\n".join(prompt)
             self.context.beaker_kernel.log("bunsen_prompt_code_gen", code_generation_prompt)
             response = await agent.inspect(code_generation_prompt)
-            preamble, code, coda = re.split("```\w*", response)
+            preamble, code, coda = re.split(r"```\w*", response)
             loop.set_state(loop.STOP_SUCCESS)
 
             result = {
@@ -147,7 +147,7 @@ User's Request:
         """
 
         query = f"Definition of {asset_type} {asset_name}"
-        matches = agent.context.get_source_code(
+        matches = await agent.context.get_source_code(
             query
         )
         return matches
