@@ -26,6 +26,7 @@ dependencies = [
   "beaker-kernel~=1.5.1",
   "archytas~=1.1.6",
   "chromadb~=0.4.22",
+  "numpy<2.0",
   "tenacity~=8.2.3",
   "tiktoken~=0.5.2",
   "marko~=2.0.3",
