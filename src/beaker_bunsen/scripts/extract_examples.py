@@ -64,17 +64,20 @@ def generate_existing_example_map(
 
 # TODO: Add optional param for setting destination
 @click.command()
+@click.option("--force", is_flag=True, type=bool, default=False, required=False, help="Force processing files even if they haven't changed")
+@click.option("--keep", is_flag=True, type=bool, default=False, required=False, help="Do not remove out-of-date examples when changes are detected")
 @click.argument("locations", type=str, required=False, nargs=-1)
-def extract_examples(locations: list[str]):
+def extract_examples(locations: list[str], force: bool, keep: bool):
     """
     Extract examples from Bunsen config or specified locations for use in RAG
     """
+    total_example_count = 0
 
     dest = 'examples-unverified'
     if not os.path.exists(dest):
         os.makedirs(dest)
 
-    sources: dict[str, list[str]] = defaultdict(lambda: [])
+    selected_locations = []
     if locations:
         bad_sources = []
         for location in locations:
@@ -84,24 +87,26 @@ def extract_examples(locations: list[str]):
                 if not (source.is_dir() or source.is_file()):
                     bad_sources.append(source)
                 else:
-                    sources["file"].append(source.absolute())
+                    # sources["file"].append(f"file://{source.absolute()}")
+                    selected_locations.append(f"file://{source.absolute()}")
         if bad_sources:
-            raise click.UsageError(f"source(s) {', '.join(bad_sources)} are not valid.")
+            raise click.UsageError(f"source(s) {', '.join(map(str, bad_sources))} are not valid.")
     else:
         # Get locations from config
         pyproject_file_path = find_pyproject_file()
         if pyproject_file_path:
             from beaker_bunsen.builder.bunsen_context import BunsenContextConfig
             bunsen_config = BunsenContextConfig.from_pyproject_toml(pyproject_file_path)
-            locations = bunsen_config.locations
+            selected_locations = bunsen_config.locations
 
         if not pyproject_file_path or not bunsen_config:
             raise click.UsageError(f"No locations provided and unable to find a bunsen configuration in the directory tree.")
 
-
-    with RCRANLocalCache(locations=sources["rcran-package"]):
+    locations = selected_locations
+    with RCRANLocalCache(locations=locations):
         resource_list: list[Resource] = []
         example_locations = [dest]
+        click.echo("Collecting resources to inspect for examples:")
         for location in locations:
             uri_parts = urlparse(location)
             scheme = uri_parts.scheme
@@ -111,14 +116,20 @@ def extract_examples(locations: list[str]):
                 example_locations.append(uri_parts.path)
                 continue
 
+            click.echo(f"  Inspecting location '{location}'")
             scheme_cls = unmap_scheme(scheme)
 
             loader = scheme_cls.default_loader()
+            found_resources = list(loader.discover([location]))
+            for resource in found_resources:
+                click.echo(f"    Found resource '{resource.uri}'")
             resource_list.extend(
-                loader.discover([location])
+                found_resources
             )
 
         example_map = generate_existing_example_map([dest])
+
+        click.echo(f"Found {len(resource_list)} resources to check for examples.\n")
 
         existing_example_nums = [filename.split('_')[1] for filename in os.listdir(dest)]
         num = 1
@@ -129,6 +140,7 @@ def extract_examples(locations: list[str]):
             pass
         files_to_delete = []
 
+        click.echo(f"Extracting examples from collected resources:")
         for resource in resource_list:
             if resource.content:
                 content = resource.content
@@ -139,14 +151,17 @@ def extract_examples(locations: list[str]):
                     content = read_from_uri(resource.uri)
 
             content_hash = calculate_content_hash(content)
-            if resource.uri in example_map["sources"] and example_map["sources"][resource.uri]["hash"] == content_hash:
-                print(f"Hash for resource {resource.uri} has not changed for resource {resource.uri}. Still {content_hash}.\nUse --force to force extraction.")
-                continue
-            else:
-                if resource.uri in example_map["sources"]:
-                    print(f'Hash for resource {resource.uri} has changed. Was {example_map["sources"][resource.uri]["hash"]}, now {content_hash}.')
-                    files_to_delete.extend(example_map["sources"][resource.uri]["example_files"])
+            click.echo(f"  {resource.resource_type.name} resource {resource.uri}:")
 
+            if resource.uri in example_map["sources"]:
+                if example_map["sources"][resource.uri]["hash"] == content_hash:
+                    if not force:
+                        click.echo(f"    Hash for resource {resource.uri} has not changed for resource {resource.uri}. Still {content_hash}.\n    Use --force to force extraction.")
+                        continue
+                    else:
+                        print(f"    Reprocessing resource {resource.uri} despite lack of change as --force is active.")
+                # Since we are continuing to process the file, we must delete any original examples based on this file.
+                files_to_delete.extend(example_map["sources"][resource.uri]["example_files"])
 
             content_lines = content.splitlines(keepends=True)
             prompt = """
@@ -236,9 +251,12 @@ The document from which to extract begins below this line and runs until the end
                 continue
 
             if not example_list:
+                click.echo("    No examples found.")
                 continue
+            click.echo(f"    {len(example_list)} examples extracted.")
 
-            click.echo(f"Found {len(example_list)} examples in {resource.uri}")
+            total_example_count += len(example_list)
+
             for example_num, example in enumerate(example_list, start=1):
                 example_filename = os.path.join(dest, f"example_{num}_{example_num}.md")
                 example_metadata_filename = f"{example_filename}.metadata"
@@ -255,8 +273,7 @@ The document from which to extract begins below this line and runs until the end
                     "stop_line": stop,
                 }
 
-                with open(example_filename, "w") as example_file, open(example_metadata_filename, "w") as example_metadata_file:
-                    example_file.write(f"""
+                example_file_contents = f"""
 # Description
 {example["description"]}
 
@@ -265,12 +282,22 @@ The document from which to extract begins below this line and runs until the end
 {prelude}
 {example_code}
 ```
-""".lstrip())
+""".lstrip()
+
+
+                with open(example_filename, "w") as example_file, open(example_metadata_filename, "w") as example_metadata_file:
+                    example_file.write(example_file_contents)
                     json.dump(example_metadata, example_metadata_file, indent=2, default=(lambda o: str(o)))
 
             # Iterate source file num for next loop
             num += 1
-        print("Files to delete: ", files_to_delete)
+
+        if files_to_delete and not keep:
+            click.echo("Removing out-of-date examples due to updates in the resources. (Run with --keep flag to preserve out-of-date examples)")
+            for file_to_delete in files_to_delete:
+                os.remove(file_to_delete)
+                click.echo(f"  {file_to_delete}")
+    click.echo(f"\nA total of {total_example_count} examples extracted from {len(resource_list)} resources")
 
 
 def should_ignore_line(line: str) -> bool:
@@ -296,7 +323,7 @@ def clean_codeblock(code: list[str]) -> str:
         top += 1
     while should_ignore_line(code[bottom]) and bottom > top:
         bottom -= 1
-    split_lines = [re.split(r'(\s)', line) for line in code[top:bottom]]
+    split_lines = [re.split(r'([ \t])', line) for line in code[top:bottom]]
     line_count = len(split_lines)
     vertical_parts = list(zip(*split_lines))
     for idx, section in enumerate(vertical_parts):

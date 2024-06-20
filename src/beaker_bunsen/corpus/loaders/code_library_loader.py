@@ -153,7 +153,9 @@ class RCRANLocalCache(contextlib.AbstractContextManager):
     ) -> None:
         self.repo = repo
         self.context_locations = [
-            URI(location).path if URI(location).scheme == "rcran-package" else location for location in locations
+            location.path  # Only work on paths.
+            for location in map(URI, locations)  # Ensure we are working on URIs
+            if location.scheme in ("rcran-package", "", None)  # Only for r-cran packages, or if no scheme is provided
         ]
         if not self.remote_package_cache:
             self.build_package_cache()

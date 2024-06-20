@@ -241,7 +241,7 @@ unsure of. The user is trusting you to give factual answers and to not just gues
         count=3,
     ):
         matches = self.corpus.store.query(
-            query=query,
+            query_string=query,
             partition="code",
             limit=count,
         )["matches"]
