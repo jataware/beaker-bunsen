@@ -1,15 +1,11 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Union, Sequence, TypedDict
+from typing import Any, Sequence
 from typing_extensions import Self
 from numpy.typing import NDArray
 import logging
-import numpy as np
 
 from ..types import Record, RecordBundle, QueryResponse
 from ..protocols import EmbeddingFunction
-from ..resources import Resource
-from ..loaders.base import BaseLoader
 
 
 logger = logging.getLogger("beaker_bunsen")
