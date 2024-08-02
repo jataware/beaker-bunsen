@@ -90,8 +90,27 @@ class Skill(BaseModel):
 
 class SkillTree(BaseModel):
     """
+    A collection of skills that work together and may becomes a new skill itself.
+    This allows dynamic building of more complex skills, using skills already learned.
 
-    A collection of skills that work to
+    This can be thought of as a non-inverted tree with the root (at the bottom) with requirements (parents) as leaf
+    nodes above. Multiple nodes can reference the same parent.
+
+        #  #
+       / \/ \  - Shared parents
+    #  # #  #
+    \ /  \ /
+     #    #     #
+     \    |    /
+      \   |   /
+       \  |  /
+        \ | /
+        Root
+
+    The root contains the code/skill that is the intended action where the parents are included to provide prerequisite
+    actions such that the root skill can complete.
+    A skill tree can be compiled to become a new single skill, or can be saved in tree form for (potentially) dynamic
+    reuse.
     """
     display_name: str
     description: str
@@ -136,6 +155,17 @@ class SkillTree(BaseModel):
 
 
 class BranchingSkillTree:
+    """
+    A "mega" tree that contains multiple paths/branches, with branches potentially having different starting points or
+    methodologies, but ends up at the same point.
+    The selection of the branch is essentially a "hyperparameter" that must be chosen first as the actual parameters to
+    compile and run the code will vary depending on the branch selected.
+    Examples of uses for this may be:
+    * Running model simulations using different modeling frameworks (chirho, pyciemss, pysb) etc
+        - Shared skills for loading data and handling results, but different intermediate skills for pre/post-processing
+          the data and for running the simulation
+    * Loading data from different sources
+    """
     pass
 # Branch in branching skill tree chosen by "hyperparameter"
 
@@ -144,9 +174,10 @@ TreeNodeId: typing.TypeAlias = str
 
 class SkillTreeNode(BaseModel):
     """
+    A node in a SkillTree.
+    The id should be unique across all trees defined in the context.
     """
     id: TreeNodeId
-    # tree: SkillTree
     skill: Skill
     parents: list[Self]
 
@@ -170,26 +201,55 @@ class SkillTreeNode(BaseModel):
         return self.skill.resolve()
 
 
+PlanStatus = typing.Literal["new", "ready", "in_progress", "success", "error"]
+
+class ResolutionPlan(BaseModel):
+    """
+    Concrete set of steps to be performed, compiled from a SkillTree.
+    This handles the actual execution of code, including any errors that may occur.
+    A plan may be split into multiple steps, because it may be required for the agent to use the output of one step to
+    determine/modify/create inputs for subsequent steps.
+        For example: a "image evaluation" skill may need to first download and inspect an image file to determine what
+        filetype the image is so that the filetype can be passed as an input as the next step of a plan.
+    """
+    steps: "list[ResolutionPlanStep]"
+    owned_vars: list[SkillInputOutput]
+    error: BaseException | None
+
+    # Pydantic configuration option to allow storage of exceptions in the model
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
 PlanStepComponent: typing.TypeAlias = SkillTree | Skill
 PlanStepStatus = typing.Literal["new", "ready", "in_progress", "success", "error"]
 
 class ResolutionPlanStep(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+    """
+    A set of code, inputs, and outputs, compiled from a set of Skills and/or SkillTrees.
+    The inputs will be a full set of inputs from all skills that are not provided by an upstream parent.
+    The outputs will be a full set of outputs from all skills included in the step.
+    "code" will be a single string that contains all of the source code from all included skills.
+    Essentially, each step can be considered as a single "code cell" in the notebook, with the agent potentially
+    using the output of this code cell to make decisions about how to run code in later code cells.
+    """
     components: list[PlanStepComponent]
     inputs: list[SkillInputOutput]
     outputs: list[SkillInputOutput]
     code: str
     status: PlanStepStatus
-    # error: BaseException | None
     error: BaseException | None
 
-
-PlanStatus = typing.Literal["new", "ready", "in_progress", "success", "error"]
-
-class ResolutionPlan(BaseModel):
+    # Pydantic configuration option to allow storage of exceptions in the model
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    steps: list[ResolutionPlanStep]
-    owned_vars: list[SkillInputOutput]
-    error: BaseException | None
+
+class ResolutionPlanComponent(BaseModel):
+    """
+    Reference to a Skill, the tree it is part of (if applicable), and the lines in the step source.
+    If an error occurs, this (hopefully) allows the agent to identify the individual skill that failed so that the
+    failing skill can be fixed, quarantined, replaced, etc.
+    Probably also useful to humans for debugging.
+    """
+    target: Skill
+    parent_tree: SkillTree | None
+    code_lines: tuple[int, int]
