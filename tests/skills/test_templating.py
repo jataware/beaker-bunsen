@@ -39,7 +39,7 @@ def test_input_templating():
         display_name="Flag map",
         description="A mapping of flags by country",
         variable="flag_map",
-        type=dict[str, str],
+        type="dict[str, str]",
     )
 
     flag_var = TemplateVariable(
@@ -69,7 +69,7 @@ def test_input_templating():
                 display_name="European Flags",
                 description="A mapping of flags ",
                 env_variable="flags",
-                type=dict[str, str],
+                type="dict[str, str]",
                 template_variable=flag_map_var,
             ),
         ],
@@ -101,7 +101,7 @@ def test_template_default_id():
         display_name="123",
         description="123",
         variable="foo",
-        type=list[str],
+        type="list[str]",
         default="hello world",
     )
     assert isinstance(var.id, str)

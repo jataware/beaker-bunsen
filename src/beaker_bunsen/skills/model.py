@@ -21,7 +21,7 @@ class TemplateVariable(BaseModel):
     variable: str
     display_name: str
     description: str
-    type: typing.Type[TemplateVarType]
+    type: typing.Type[TemplateVarType] | str
     default: TemplateVarType | None = None # TODO: Figure out how well this (the typing) works and how to store arbitrary defaults a in sqlite db
 
 
@@ -30,16 +30,34 @@ class SkillInputOutput(BaseModel):  # TODO: Better name?
     Things that need to exist in the environment so that the skill can use it or that a skill produces.
     Can be used to create a tree allowing skills to be chained together.
     """
+    instance_count: typing.ClassVar[dict[str, int]] = {}
+
     display_name: str
     description: str
-    type: typing.Type  # Aware of submodules and/or alternative types
+    type: typing.Type | str # Aware of submodules and/or alternative types
     resolved: bool = False
     env_variable: str | None = None
+    template_variable_base: str | None = None
     template_variable: TemplateVariable | None = None
+
+    def model_post_init(self, __context: typing.Any) -> None:
+        if self.template_variable is None and self.template_variable_base is not None:
+            # Update instance count for this variable
+            instance_count = self.__class__.instance_count.get(self.template_variable_base, 0) + 1
+            self.__class__.instance_count[self.template_variable_base] = instance_count
+
+            # Build default template variable instance
+            self.template_variable = TemplateVariable(
+                variable=f"{self.template_variable_base}_{self.__class__.instance_count}",
+                type=self.type,
+                display_name=self.display_name,
+                description=self.description,
+            )
+        return super().model_post_init(__context)
 
     @property
     def varname(self):
-        return self.variable.template_var if self.variable else None
+        return self.template_variable.variable if self.template_variable else None
 
 
 SkillId: typing.TypeAlias = str
@@ -53,7 +71,7 @@ class Skill(BaseModel):
     environment. As the inputs and outputs are the same type, skills can be chained such that the output of an earlier
     skill can be used by another skill, either as part of the same "plan" or as part of a subsequent interaction.
     """
-    id: SkillId
+    id: SkillId = Field(default_factory=lambda: uuid4().hex)
     display_name: str
     description: str
     required_imports: list[str]
@@ -89,7 +107,7 @@ class Skill(BaseModel):
 
 
 class SkillTree(BaseModel):
-    """
+    r"""
     A collection of skills that work together and may becomes a new skill itself.
     This allows dynamic building of more complex skills, using skills already learned.
 
@@ -177,13 +195,26 @@ class SkillTreeNode(BaseModel):
     A node in a SkillTree.
     The id should be unique across all trees defined in the context.
     """
-    id: TreeNodeId
+    id: TreeNodeId = Field(default_factory=lambda: uuid4().hex)
     skill: Skill
     parents: list[Self]
 
     @property
     def inputs(self) -> typing.Iterable[SkillInputOutput]:
-        return itertools.chain((parent.outputs for parent in self.parents))
+        seen = set()
+        for input in itertools.chain(self.skill.inputs, *(parent.inputs for parent in self.parents)):
+            if input.env_variable not in seen:
+                yield input
+            seen.add(input.env_variable)
+        return itertools.chain(self.skill.inputs, *(parent.inputs for parent in self.parents))
+
+    @property
+    def variables(self) -> typing.Iterable[SkillInputOutput]:
+        seen = set()
+        for variable in itertools.chain(self.skill.variables, *(parent.variables for parent in self.parents)):
+            if variable.id not in seen:
+                yield variable
+            seen.add(variable.id)
 
     @property
     def resolved(self) -> bool:
