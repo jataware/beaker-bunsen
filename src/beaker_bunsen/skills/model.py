@@ -32,6 +32,7 @@ class SkillInputOutput(BaseModel):  # TODO: Better name?
     """
     instance_count: typing.ClassVar[dict[str, int]] = {}
 
+    id: str = Field(default_factory=lambda: uuid4().hex)
     display_name: str
     description: str
     type: typing.Type | str # Aware of submodules and/or alternative types
@@ -41,14 +42,17 @@ class SkillInputOutput(BaseModel):  # TODO: Better name?
     template_variable: TemplateVariable | None = None
 
     def model_post_init(self, __context: typing.Any) -> None:
-        if self.template_variable is None and self.template_variable_base is not None:
+        if self.template_variable_base is None:
+                self.template_variable_base = self.env_variable
+        if self.template_variable is None:
             # Update instance count for this variable
             instance_count = self.__class__.instance_count.get(self.template_variable_base, 0) + 1
             self.__class__.instance_count[self.template_variable_base] = instance_count
 
             # Build default template variable instance
             self.template_variable = TemplateVariable(
-                variable=f"{self.template_variable_base}_{self.__class__.instance_count}",
+                variable=str(self.template_variable_base),
+                # variable=f"{self.template_variable_base}_{instance_count}",
                 type=self.type,
                 display_name=self.display_name,
                 description=self.description,
@@ -137,6 +141,9 @@ class SkillTree(BaseModel):
 
     @property
     def nodes(self) -> typing.Iterable["SkillTreeNode"]:
+        """
+        No duplicates
+        """
         seen_nodes = set()
         search_nodes = deque([self.head])
         while search_nodes:
@@ -153,6 +160,23 @@ class SkillTree(BaseModel):
             yield node
             search_nodes.extend(node.parents)
 
+    def nodes_by_depth(self) -> list[tuple[int, list["SkillTreeNode"]]]:
+        """
+        Contains duplicates
+        """
+        current_depth = 1
+        nodes_at_depth = [self.head]
+        nodes_at_next_level = []
+        output = []
+        while nodes_at_depth:
+            for node in nodes_at_depth:
+                nodes_at_next_level.extend(node.parents)
+            output.append([current_depth, nodes_at_depth])
+            nodes_at_depth = nodes_at_next_level
+            nodes_at_next_level = []
+            current_depth += 1
+        return output
+
     @property
     def all_required_imports(self) -> list[str]:
         requirements = set()
@@ -167,6 +191,60 @@ class SkillTree(BaseModel):
     def resolve(self) -> bool:
         if self.resolved:
             return True
+
+    def compile(self) -> tuple[list[TemplateVariable], list[SkillInputOutput], str]:
+        variables = []
+        inputs = []
+        source_parts = []
+        source_parts.append("\n".join(sorted(self.all_required_imports)))
+
+        seen_variables = set()
+        seen_inputs = set()
+        seen_nodes = set()
+
+        for _, nodes in sorted(self.nodes_by_depth(), reverse=True, key=lambda obj: obj[0]):
+            for node in nodes:
+                if node.id in seen_nodes:
+                    continue
+                seen_nodes.add(node.id)
+
+                new_variables = node.skill.variables
+                variables.extend(variable for variable in new_variables if variable.id not in seen_variables)
+                seen_variables.update(variable.id for variable in new_variables)
+                new_inputs = node.skill.inputs
+                inputs.extend(input for input in new_inputs if input.id not in seen_inputs)
+                seen_inputs.update(input.id for input in new_inputs)
+                source_parts.append(node.skill.source)
+
+        return variables, inputs, "\n\n".join(source_parts)
+
+
+    def render(self, **kwargs):
+        import pprint
+        variables, inputs, source = self.compile()
+        outputs = self.head.skill.outputs
+
+        template = jinja2.Template(source)
+        vars = kwargs.copy()
+        for var in variables:
+            if var.variable in vars:  # Passed in as an argument
+                continue
+            elif var.default != None:  # TODO: Do we need to pass in None? Should this be a singleton?
+                vars[var.variable] = var.default
+            else:
+                raise
+        for input in inputs:
+            print("input: ", input.display_name, input.template_variable.variable, type(input))
+            if input.template_variable.variable not in vars:
+                vars[input.template_variable.variable] = input.env_variable
+        for output in outputs:
+            print("output: ", output.display_name, output.template_variable.variable, type(output))
+            if output.template_variable.variable not in vars:
+                vars[output.template_variable.variable] = output.env_variable
+        print("Vars:")
+        pprint.pprint(vars)
+        return template.render(vars)
+
 
     def model_post_init(self, __context: typing.Any) -> None:
         return super().model_post_init(__context)

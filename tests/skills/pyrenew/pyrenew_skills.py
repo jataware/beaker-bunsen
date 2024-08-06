@@ -13,6 +13,7 @@ pmf_array = SkillInputOutput(
     display_name="probability_mass_function",  # TODO: Check if this is correct
     description="",
     type="jnp.array",
+    env_variable="pmf_array",
 )
 
 I0 = SkillInputOutput(
@@ -52,7 +53,12 @@ new_generation_interval = Skill(
 define_intitial_infections = Skill(
     display_name="Define initial infections",
     description="",
-    required_imports=["import numpyro.distributions as dist", "from pyrenew.deterministic import DeterministicPMF"],
+    required_imports=[
+        "import numpyro.distributions as dist",
+        "from pyrenew.deterministic import DeterministicPMF",
+        "from pyrenew.latent import InfectionInitializationProcess",
+        "from pyrenew.latent import InitializeInfectionsZeroPad",
+    ],
     variables=[
         TemplateVariable(
             variable="I0_distribution",
@@ -188,7 +194,9 @@ define_observation_process = Skill(
 define_renewal_model = Skill(
     display_name="Define a RtInfections Renewal Model",
     description="Defines a renewal model",
-    required_imports=[],
+    required_imports=[
+        "from pyrenew.model import RtInfectionsRenewalModel",
+    ],
     variables=[
 
     ],
@@ -206,10 +214,10 @@ define_renewal_model = Skill(
     source="""
 {{ model }} = RtInfectionsRenewalModel(
     gen_int_rv={{ gen_int }},
-    I0_rv=i{{ I0 }},
+    I0_rv={{ I0 }},
     Rt_process_rv={{ rt_proc }},
     latent_infections_rv={{ latent_infections  }},
-    infection_obs_process_rv={{ observation_process }} ,
+    infection_obs_process_rv={{ observation_process }},
 )
 """.strip(),
 
