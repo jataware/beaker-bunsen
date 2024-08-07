@@ -20,13 +20,6 @@ logger = logging.getLogger(__name__)
 
 class BunsenAgent(BaseAgent):
 
-    EXAMPLE_INTRO = """
-Below are some similar examples of code that may be similar or related to the current request.
-If the request from the user is similar enough to one of these examples, use it to help write code to answer the user's request.
-""".strip()
-    EXAMPLE_OUTRO = """
-""".strip()
-
     CODE_PROMPT_INTRO = """
 Please generate {self.context.subkernel.DISPLAY_NAME} code intended to run in Jupyter kernel "{self.context.subkernel.KERNEL_NAME}".
 to satisfy the user's request below.
@@ -56,22 +49,6 @@ No addtional text is needed in the response, just the code block.
             **kwargs
         )
 
-    async def format_examples(self, examples: list[QueryResult]) -> str:
-        code_example_str = "\n\n".join(
-            """
-======== example {num}: {example_id} start ========
-{example}
-======== example {num}: {example_id} end   ========
-            """.strip().format(example_id=example["record"].id, example=example["record"].content, num=num)
-            for num, example in enumerate(examples, start=1)
-        )
-        return "\n".join([
-            self.EXAMPLE_INTRO,
-            code_example_str,
-            self.EXAMPLE_OUTRO,
-        ])
-
-
     @tool()
     async def generate_code(self, code_request: str, agent: AgentRef, loop: LoopControllerRef):
         """
@@ -85,9 +62,7 @@ No addtional text is needed in the response, just the code block.
         """
 
         try:
-            example_future = self.context.get_examples(
-                query=code_request
-            )
+            example_future = self.context.get_example_string(code_request)
             state_future = self.context.get_subkerkel_state_description()
 
             examples, state_desc = await asyncio.gather(
@@ -108,7 +83,7 @@ User's Request:
                 self.context.library_description,
             ]
             if examples:
-                prompt.append(await self.format_examples(examples))
+                prompt.append(examples)
             if state_desc:
                 prompt.append(state_desc)
             prompt.append(self.CODE_PROMPT_OUTRO.format(self=self))

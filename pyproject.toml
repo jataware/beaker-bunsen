@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
   "beaker-kernel~=1.6.1",
-  "archytas~=1.1.6",
+  "archytas~=1.1.8",
   "chromadb~=0.4.22",
   "numpy<2.0",
   "tenacity~=8.2.3",

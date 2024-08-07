@@ -165,6 +165,8 @@ unsure of. The user is trusting you to give factual answers and to not just gues
 
     async def get_subkerkel_state_description(self) -> str:
         state = await self.subkernel_state()
+        if not state:
+            return None
         output = []
         if state["variables"]:
             output.append("The coding environment's state currently has the following local variables:")
@@ -201,6 +203,32 @@ unsure of. The user is trusting you to give factual answers and to not just gues
         else:
             return None
 
+    async def get_example_string(self, query: str) -> str | None:
+        examples: list[QueryResult] = await self.get_examples(
+            query=query
+        )
+        if not examples:
+            return None
+
+        code_example_str = "\n\n".join(
+            """
+======== example {num}: {example_id} start ========
+{example}
+======== example {num}: {example_id} end   ========
+            """.strip().format(
+                example_id=example["record"].id,
+                example=example["record"].content.strip(),
+                num=num
+            )
+            for num, example in enumerate(examples, start=1)
+        )
+        return "\n".join([
+            """
+Below are some similar examples of code that may be similar or related to the current request.
+If the request from the user is similar enough to one of these examples, use it to help write code to answer the user's request.
+            """.strip(),
+            code_example_str,
+        ])
 
     async def get_examples(
         self,
@@ -254,11 +282,17 @@ unsure of. The user is trusting you to give factual answers and to not just gues
         state_description_future = self.get_subkerkel_state_description()
         context_prompt_future = self.get_context_prompt()
         docs_future = self.get_documentation_string()
+        current_query = getattr(self.agent, "current_query", None)
+        if current_query:
+            example_future = self.get_example_string(current_query)
+        else:
+            example_future = asyncio.sleep(0.0)
 
-        state_description, context_prompt, docs_result = await asyncio.gather(
+        state_description, context_prompt, docs_result, example_result = await asyncio.gather(
             state_description_future,
             context_prompt_future,
-            docs_future
+            docs_future,
+            example_future,
         )
 
         prompt = [
@@ -267,16 +301,17 @@ unsure of. The user is trusting you to give factual answers and to not just gues
             state_description,
             docs_result,
             context_prompt,
-            self.PROMPT_OUTRO,
+            example_result,
+            self.PROMPT_OUTRO
         ]
 
-        result = "\n".join(part for part in prompt if part)
+        result = "\n\n".join(part for part in prompt if part)
         return result
 
 
     async def auto_context(self):
         prompt = await self.build_prompt()
-        self.beaker_kernel.log("auto_context", prompt)
+        self.beaker_kernel.log("bunsen_auto_context", prompt)
         return prompt
 
 
