@@ -212,7 +212,7 @@ unsure of. The user is trusting you to give factual answers and to not just gues
         if query:
             examples = await self.query_corpus(
                 query_str=query,
-                partition="code",
+                partition="examples",
                 limit=count,
             )
             return examples["matches"]
