@@ -187,7 +187,6 @@ class BaseChromaDBStore(VectorStore):
             uris = data_cols["uri"] or None,
         )
 
-
     def query(
         self,
         query_string: str,
@@ -358,6 +357,14 @@ class ZippedChromaDBStore(ChromaDBLocalStore):
             default_partition=self.default_partition,
         )
         return clone
+
+    def update_records(
+        self,
+        bundle: RecordBundle,
+        partition: str|None = None
+    ):
+        super().update_records(bundle, partition)
+        self.update_zipfile()
 
     def __del__(self):
         self.cleanup()

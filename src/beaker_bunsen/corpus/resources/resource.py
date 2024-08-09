@@ -20,6 +20,7 @@ class ResourceType(enum.Enum):
     Documentation = "documentation"
     Example = "example"
     Image = "image"
+    Skill = "skill"
 
 
 def _is_resource(obj: Any):
@@ -189,6 +190,11 @@ class ExampleResource(Resource):
         self.validated = True
 
 
+class SkillResource(Resource):
+    resource_type = ResourceType.Skill
+    default_partition: str = "skills"
+
+
 ResourceFilter: TypeAlias = Optional[Callable[[Resource], bool]]
 
 
@@ -210,3 +216,7 @@ def isExampleResource(resource: Resource) -> bool:
 
 def isImageResource(resource: Resource) -> bool:
     return isinstance(resource, Resource) and resource.resource_type == ResourceType.Image
+
+
+def isSkillResource(resource: Resource) -> bool:
+    return isinstance(resource, SkillResource)

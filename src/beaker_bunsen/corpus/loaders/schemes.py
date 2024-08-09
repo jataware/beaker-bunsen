@@ -371,3 +371,13 @@ class RCranScheme(Scheme):
             with target_file.open() as source:
                 content = source.read()
         return content
+
+
+class SQLiteScheme(Scheme):
+    URI_SCHEME = 'sqlite'
+
+
+class SkillScheme(SQLiteScheme):
+    URI_SCHEME = 'skill'
+
+    pass
