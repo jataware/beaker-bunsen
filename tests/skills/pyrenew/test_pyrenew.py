@@ -7,7 +7,7 @@ def test_imports():
 
 def test_skill_tree():
     assert len(list(build_renewal_model.nodes)) == 6
-    assert len(list(build_renewal_model.all_required_imports)) == 10
+    assert len(list(build_renewal_model.all_required_imports)) == 13
     assert len(list(build_renewal_model.head.inputs)) == 6
     assert len(list(build_renewal_model.head.variables)) == 2
 
@@ -22,11 +22,16 @@ def test_nodes_by_depth():
 
 
 def test_compile():
-    compiled_text, variables, inputs = build_renewal_model.compile()
-    # assert compiled_text == "foo"
+    variables, variable_values, inputs, compiled_text = build_renewal_model.compile()
+    assert isinstance(variables, list)
+    assert isinstance(variable_values, dict)
+    assert isinstance(inputs, list)
+    assert isinstance(compiled_text, str)
 
 
 def test_render():
     rendered_source = build_renewal_model.render()
-    # print(f"Rendered: ============\n{rendered_source}\n========================")
-    # assert rendered_source == False
+    assert isinstance(rendered_source, str)
+    assert 'base_rv=SimpleRandomWalkProcess' in rendered_source
+    assert 'from pyrenew.model import RtInfectionsRenewalModel' in rendered_source
+    assert 'InitializeInfectionsZeroPad(pmf_array.size),' in rendered_source

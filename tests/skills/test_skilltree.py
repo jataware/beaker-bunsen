@@ -12,14 +12,8 @@ def skills():
     basic_table = SkillInputOutput(
         display_name="basic_table",
         description="Simple 3x3 Pandas dataframe of floats",
-        type=pandas.DataFrame,
-        # variable=TemplateVariable(
-        #     id="test-var-1",
-        #     display_name="test_table_var",
-        #     variable="table1",
-        #     description="Holds a reference to the basic table variable",
-        #     type=pandas.DataFrame,
-        # )
+        type_str=pandas.DataFrame,
+        variable="table1"
     )
     skill1 = Skill(
         id="test1",

@@ -1,39 +1,52 @@
+import hashlib
+import uuid
+
 from beaker_bunsen.skills.model import Skill, SkillTree, SkillTreeNode, SkillInputOutput, TemplateVariable
 
 
+# Ensure IDs are stable for testing, based on passd in string, but still are valid uuid4 values
+def mock_uuid4(hash: str):
+    new_uuid = uuid.UUID(version=4, bytes=hashlib.md5(hash.encode()).digest()).hex
+    return new_uuid
+
 generation_interval = SkillInputOutput(
+    id=mock_uuid4("gen_int"),
     display_name="Generation Interval",
-    description="",
-    type="pyrenew.deterministic.DeterministicPMF",
-    env_variable="gen_int",
-    template_variable_base="gen_int",
+    description="Holds the deterministic interval for generating values",
+    type_str="pyrenew.deterministic.DeterministicPMF",
+    variable="gen_int",
 )
 
 pmf_array = SkillInputOutput(
+    id=mock_uuid4("pmf_array"),
     display_name="probability_mass_function",  # TODO: Check if this is correct
-    description="",
-    type="jnp.array",
-    env_variable="pmf_array",
+    description="Holds an array of probability mass function values",
+    type_str="jnp.array[float]",
+    variable="pmf_array",
 )
 
 I0 = SkillInputOutput(
-    display_name="I0 (initial infections)",
-    description="",
-    type="pyrenew.deterministic.DeterministicPMF",
-    env_variable="I0",
-    template_variable_base="I0",
+    id=mock_uuid4("i0"),
+    display_name="initial infections (I0)",
+    description="Initial infections",
+    type_str="pyrenew.deterministic.DeterministicPMF",
+    variable="I0",
 )
 
 new_generation_interval = Skill(
+    id=mock_uuid4("new_gen_int"),
     display_name="New deterministic generation interval",
-    description="",
-    required_imports=["import jax.numpy as jnp", "from pyrenew.deterministic import DeterministicPMF"],
+    description="Produces a new deterministic generation interval for use in a pyrenew model",
+    required_imports=[
+        "import jax.numpy as jnp",
+        "from pyrenew.deterministic import DeterministicPMF",
+    ],
     variables=[
         TemplateVariable(
             variable="pmf_values",
             description="PMF array values",
             display_name="Probabily Mass Function array values",
-            type="list[float]",
+            type_str="list[float]",
             default=[0.4, 0.3, 0.2, 0.1],
         )
     ],
@@ -51,8 +64,9 @@ new_generation_interval = Skill(
 )
 
 define_intitial_infections = Skill(
+    id=mock_uuid4("init_infec"),
     display_name="Define initial infections",
-    description="",
+    description="Produces an initial infection value based on the desired distribution",
     required_imports=[
         "import numpyro.distributions as dist",
         "from pyrenew.deterministic import DeterministicPMF",
@@ -64,7 +78,7 @@ define_intitial_infections = Skill(
             variable="I0_distribution",
             display_name="I0 distribution",
             description="distribution for I0",
-            type="numpyro.distributions.distribution.Distribution",
+            type_str="numpyro.distributions.distribution.Distribution",
             default="dist.LogNormal(2.5, 1)",
         )
     ],
@@ -87,39 +101,40 @@ define_intitial_infections = Skill(
 )
 
 model = SkillInputOutput(
+    id=mock_uuid4("model"),
     display_name="model",
-    description="",
-    env_variable="model",
-    template_variable_base="model",
-    type="pyrenew.metaclass.Model",
+    description="A pyrenew model",
+    variable="model",
+    type_str="pyrenew.metaclass.Model",
 )
 rt_proc = SkillInputOutput(
+    id=mock_uuid4("rt_proc_io"),
     display_name="rt_proc",
     description="Procedure that generates a sample for values of R at different timesteps t",
-    env_variable="rt_proc",
-    template_variable_base="rt_proc",
-    type="pyrenew.metaclass.RandomVariable",
+    variable="rt_proc",
+    type_str="pyrenew.metaclass.RandomVariable",
 )
 latent_infections = SkillInputOutput(
+    id=mock_uuid4("latent_infections"),
     display_name="latent_infections",
-    description="",
-    env_variable="latent_infections",
-    template_variable_base="latent_infections",
-    type="pyrenew.latent.Infections",
+    description="Latent infection information",
+    variable="latent_infections",
+    type_str="pyrenew.latent.Infections",
 
 )
 observation_process = SkillInputOutput(
+    id=mock_uuid4("obs_proc"),
     display_name="observation_process",
-    description="",
-    env_variable="observation_process",
-    template_variable_base="observation_process",
-    type="pyrenew.metaclass.RandomVariable",
+    description="A random variable class for producing observations from a distribution",
+    variable="observation_process",
+    type_str="pyrenew.metaclass.RandomVariable",
 
 )
 
 define_rt_proc = Skill(
+    id=mock_uuid4("rt_proc_skill"),
     display_name="rt_proc",
-    description="",
+    description="Defines a class that produces observations from a distribution",
     required_imports=[
         "import numpyro.distributions as dist",
         "from pyrenew.process import SimpleRandomWalkProcess",
@@ -167,8 +182,9 @@ class MyRt(RandomVariable):
 """.strip(),
 )
 define_latent_infections = Skill(
+    id=mock_uuid4("def_latent_inf"),
     display_name="latent_infections",
-    description="",
+    description="Defines the a variable which tracks latent infections",
     required_imports=["from pyrenew.latent import Infections"],
     variables=[],
     inputs=[],
@@ -179,8 +195,9 @@ define_latent_infections = Skill(
 """.strip(),
 )
 define_observation_process = Skill(
+    id=mock_uuid4("def_obs_proc"),
     display_name="observation_process",
-    description="",
+    description="Defines a observation process variable",
     required_imports=["from pyrenew.observation import PoissonObservation"],
     variables=[],
     inputs=[],
@@ -192,6 +209,7 @@ define_observation_process = Skill(
 )
 
 define_renewal_model = Skill(
+    id=mock_uuid4("def_ren_mod"),
     display_name="Define a RtInfections Renewal Model",
     description="Defines a renewal model",
     required_imports=[
@@ -228,6 +246,33 @@ gen_int_node = SkillTreeNode(
     parents=[],
 )
 
+# head =
+# SkillTreeNode(
+#         skill=define_renewal_model,
+#         parents=[
+#             SkillTreeNode(
+#                 skill=define_observation_process,
+#                 parents=[],
+#             ),
+#             SkillTreeNode(
+#                 skill=define_rt_proc,
+#                 parents=[],
+#             ),
+#             SkillTreeNode(
+#                 skill=define_latent_infections,
+#                 parents=[],
+#             ),
+#             SkillTreeNode(
+#                 skill=define_intitial_infections,
+#                 parents=[
+#                     gen_int_node
+#                 ],
+#             ),
+#             gen_int_node
+#         ]
+#     )
+
+
 build_renewal_model = SkillTree(
     display_name="Build renewal model",
     description="Builds a new renewal model from scratch",
@@ -256,3 +301,5 @@ build_renewal_model = SkillTree(
         ]
     )
 )
+
+print("done setting up")

@@ -17,7 +17,7 @@ def test_basic_templating():
                 variable="location",
                 display_name="location",
                 description="Place to greet",
-                type=str,
+                type_str=str,
                 default="world",
             )
         ],
@@ -39,21 +39,21 @@ def test_input_templating():
         display_name="Flag map",
         description="A mapping of flags by country",
         variable="flag_map",
-        type="dict[str, str]",
+        type_str="dict[str, str]",
     )
 
     flag_var = TemplateVariable(
         display_name="Country Flag",
         description="The flag associated with a country",
         variable="flag",
-        type=str,
+        type_str=str,
     )
 
     country_var = TemplateVariable(
                 variable="country",
                 display_name="country",
                 description="name of country to check",
-                type=str,
+                type_str=str,
                 default="france",
             )
 
@@ -68,8 +68,8 @@ def test_input_templating():
             SkillInputOutput(
                 display_name="European Flags",
                 description="A mapping of flags ",
-                env_variable="flags",
-                type="dict[str, str]",
+                variable="flags",
+                type_str="dict[str, str]",
                 template_variable=flag_map_var,
             ),
         ],
@@ -77,8 +77,8 @@ def test_input_templating():
             SkillInputOutput(
                 display_name="european_flag",
                 description="flag of a country",
-                type=str,
-                env_variable="myflag",
+                type_str=str,
+                variable="myflag",
                 template_variable=flag_var,
            ),
         ],
@@ -101,7 +101,7 @@ def test_template_default_id():
         display_name="123",
         description="123",
         variable="foo",
-        type="list[str]",
+        type_str="list[str]",
         default="hello world",
     )
     assert isinstance(var.id, str)

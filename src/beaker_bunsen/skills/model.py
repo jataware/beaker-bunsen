@@ -1,14 +1,33 @@
 import itertools
+import types
 import typing
 from collections import deque
 from pydantic import BaseModel, Field, ConfigDict, UUID4
-from typing_extensions import Self
+from types import GenericAlias
+from typing_extensions import Self, TypeAliasType, assert_type
 from uuid import uuid4
 
 import jinja2
 
 
 TemplateVarType = typing.TypeVar('TemplateVarType')
+
+IDType: typing.TypeAlias = str
+UUIDField: typing.TypeAlias = typing.Annotated[IDType, Field(default_factory=lambda: uuid4().hex)]
+
+import typing
+TemplateVariable_ASK = typing.Literal["<!<ASK>>"]
+TemplateVariable_UNKNOWN = typing.Literal["<!<UNKNOWN>>"]
+
+TemplateVariableSentinel: typing.TypeAlias = typing.Literal[
+    TemplateVariable_ASK,
+    TemplateVariable_UNKNOWN,
+]
+TemplateVariableName: typing.TypeAlias = TemplateVariableSentinel | str
+TemplateVariableValue: typing.TypeAlias = TemplateVariableSentinel | typing.Any
+TemplateVariableDict: typing.TypeAlias = dict[TemplateVariableName, TemplateVariableValue]
+
+TemplateVariableSentinelValues: list[TemplateVariableSentinel] = typing.get_args(TemplateVariableSentinel)
 
 class TemplateVariable(BaseModel):
     """
@@ -17,12 +36,28 @@ class TemplateVariable(BaseModel):
     A template variable may be used in multiple templates or multiple times in a single template.
     The id and template_var must be unique across all template variables defined within a context.
     """
-    id: str = Field(default_factory=lambda: uuid4().hex)
-    variable: str
+    id: UUIDField
+    variable: TemplateVariableName
     display_name: str
     description: str
-    type: typing.Type[TemplateVarType] | str
+    type_str: str | type
     default: TemplateVarType | None = None # TODO: Figure out how well this (the typing) works and how to store arbitrary defaults a in sqlite db
+
+    def model_post_init(self, __context: typing.Any) -> types.NoneType:
+        if isinstance(self.type_str, type):
+            self.type_str = str(self.type_str)
+        return super().model_post_init(__context)
+
+    def __str__(self) -> str:
+        return "\n".join([
+            f'TemplateVariable:',
+            f'  template variable: `{self.variable}`',
+            f'  uid: {self.id}',
+            f'  display name: {self.display_name}',
+            f'  description: {self.description}',
+            f'  type: {self.type_str}',
+            f'  default value: ```{self.default}```'
+        ])
 
 
 class SkillInputOutput(BaseModel):  # TODO: Better name?
@@ -32,28 +67,22 @@ class SkillInputOutput(BaseModel):  # TODO: Better name?
     """
     instance_count: typing.ClassVar[dict[str, int]] = {}
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: UUIDField
     display_name: str
     description: str
-    type: typing.Type | str # Aware of submodules and/or alternative types
+    type_str: str | type
     resolved: bool = False
-    env_variable: str | None = None
-    template_variable_base: str | None = None
+    variable: str
     template_variable: TemplateVariable | None = None
 
     def model_post_init(self, __context: typing.Any) -> None:
-        if self.template_variable_base is None:
-                self.template_variable_base = self.env_variable
+        if not isinstance(self.type_str, str):
+            self.type_str = str(self.type_str)
         if self.template_variable is None:
-            # Update instance count for this variable
-            instance_count = self.__class__.instance_count.get(self.template_variable_base, 0) + 1
-            self.__class__.instance_count[self.template_variable_base] = instance_count
-
             # Build default template variable instance
             self.template_variable = TemplateVariable(
-                variable=str(self.template_variable_base),
-                # variable=f"{self.template_variable_base}_{instance_count}",
-                type=self.type,
+                variable=self.variable,
+                type_str=self.type_str,
                 display_name=self.display_name,
                 description=self.description,
             )
@@ -63,8 +92,17 @@ class SkillInputOutput(BaseModel):  # TODO: Better name?
     def varname(self):
         return self.template_variable.variable if self.template_variable else None
 
+    def __str__(self) -> str:
+        return "\n".join([
+            f'InputOutputVariable:',
+            f'  uid: {self.id}',
+            f'  display name: {self.display_name}',
+            f'  description: {self.description}',
+            f'  type: {self.type_str}',
+            f'  variable name in code: `{self.variable}`',
+            f'  template variable: `{self.template_variable.variable}`'
+        ])
 
-SkillId: typing.TypeAlias = str
 
 class Skill(BaseModel):
     """
@@ -75,7 +113,7 @@ class Skill(BaseModel):
     environment. As the inputs and outputs are the same type, skills can be chained such that the output of an earlier
     skill can be used by another skill, either as part of the same "plan" or as part of a subsequent interaction.
     """
-    id: SkillId = Field(default_factory=lambda: uuid4().hex)
+    id: UUIDField
     display_name: str
     description: str
     required_imports: list[str]
@@ -101,14 +139,30 @@ class Skill(BaseModel):
             else:
                 raise
         for input in self.inputs:
-            print(input, type(input))
             if input.display_name not in vars:
-                vars[input.template_variable.variable] = input.env_variable
+                vars[input.template_variable.variable] = input.variable
         for output in self.outputs:
             if output.display_name not in vars:
-                vars[output.template_variable.variable] = output.env_variable
+                vars[output.template_variable.variable] = output.variable
         return template.render(vars)
 
+    def __str__(self) -> str:
+        return "\n".join([
+            f'Skill:',
+            f'  uid: {self.id}',
+            f'  display name: {self.display_name}',
+            f'  description: {self.description}',
+            f'  required imports:',
+            *[f'    "{import_str}"' for import_str in self.required_imports],
+            f'  variables:',
+            *[f'    {line}' for variable in self.variables for line in str(variable).splitlines()],
+            f'  inputs:',
+            *[f'    {line}' for input in self.inputs for line in str(input).splitlines()],
+            f'  outputs:',
+            *[f'    {line}' for output in self.outputs for line in str(output).splitlines()],
+            f'  language: {self.language}',
+            f'  skill source code:\n    ```\n{self.source}\n    ```',
+        ])
 
 class SkillTree(BaseModel):
     r"""
@@ -134,10 +188,27 @@ class SkillTree(BaseModel):
     A skill tree can be compiled to become a new single skill, or can be saved in tree form for (potentially) dynamic
     reuse.
     """
+    id: UUIDField
     display_name: str
     description: str
     head: "SkillTreeNode"
-    # node_index: dict["TreeNodeId", "SkillTreeNode"]
+
+
+    @classmethod
+    def from_agent_response(cls: type[Self], agent_result: 'AgentResponse', skill_index: dict[str, Skill]):
+        # head = parse_node_tree()
+        def build_tree(skill_response: SkillResponse):
+            return SkillTreeNode(
+                skill=skill_index[skill_response.skill_id],
+                parents=[build_tree(parent) for parent in skill_response.parents],
+                variable_values=skill_response.variable_values,
+            )
+        head = build_tree(agent_result.item)
+        return cls(
+            display_name="Unsaved SkillTree 1",
+            description="Dynamically generated SkillTree from a LLM Agent Response",
+            head=head
+        )
 
     @property
     def nodes(self) -> typing.Iterable["SkillTreeNode"]:
@@ -192,8 +263,9 @@ class SkillTree(BaseModel):
         if self.resolved:
             return True
 
-    def compile(self) -> tuple[list[TemplateVariable], list[SkillInputOutput], str]:
+    def compile(self) -> tuple[list[TemplateVariable], TemplateVariableDict, list[SkillInputOutput], str]:
         variables = []
+        variable_values = {}
         inputs = []
         source_parts = []
         source_parts.append("\n".join(sorted(self.all_required_imports)))
@@ -209,6 +281,13 @@ class SkillTree(BaseModel):
                 seen_nodes.add(node.id)
 
                 new_variables = node.skill.variables
+                # new_variable_values = node.variable_values
+                if node.variable_values:
+                    variable_values.update({
+                        var_name: var_value
+                        for var_name, var_value in node.variable_values.items()
+                        if var_name not in variable_values
+                    })
                 variables.extend(variable for variable in new_variables if variable.id not in seen_variables)
                 seen_variables.update(variable.id for variable in new_variables)
                 new_inputs = node.skill.inputs
@@ -216,34 +295,31 @@ class SkillTree(BaseModel):
                 seen_inputs.update(input.id for input in new_inputs)
                 source_parts.append(node.skill.source)
 
-        return variables, inputs, "\n\n".join(source_parts)
+        return variables, variable_values, inputs, "\n\n".join(source_parts)
 
 
     def render(self, **kwargs):
-        import pprint
-        variables, inputs, source = self.compile()
+        variables, variable_values, inputs, source = self.compile()
         outputs = self.head.skill.outputs
 
         template = jinja2.Template(source)
-        vars = kwargs.copy()
+        # Ensure that we accept render method values over values extracted from the tree, if provided.
+        variable_values.update(kwargs)
+
         for var in variables:
-            if var.variable in vars:  # Passed in as an argument
+            if var.variable in variable_values:  # Passed in as an argument
                 continue
             elif var.default != None:  # TODO: Do we need to pass in None? Should this be a singleton?
-                vars[var.variable] = var.default
+                variable_values[var.variable] = var.default
             else:
                 raise
         for input in inputs:
-            print("input: ", input.display_name, input.template_variable.variable, type(input))
-            if input.template_variable.variable not in vars:
-                vars[input.template_variable.variable] = input.env_variable
+            if input.template_variable.variable not in variable_values:
+                variable_values[input.template_variable.variable] = input.variable
         for output in outputs:
-            print("output: ", output.display_name, output.template_variable.variable, type(output))
-            if output.template_variable.variable not in vars:
-                vars[output.template_variable.variable] = output.env_variable
-        print("Vars:")
-        pprint.pprint(vars)
-        return template.render(vars)
+            if output.template_variable.variable not in variable_values:
+                variable_values[output.template_variable.variable] = output.variable
+        return template.render(variable_values)
 
 
     def model_post_init(self, __context: typing.Any) -> None:
@@ -266,24 +342,23 @@ class BranchingSkillTree:
 # Branch in branching skill tree chosen by "hyperparameter"
 
 
-TreeNodeId: typing.TypeAlias = str
-
 class SkillTreeNode(BaseModel):
     """
     A node in a SkillTree.
     The id should be unique across all trees defined in the context.
     """
-    id: TreeNodeId = Field(default_factory=lambda: uuid4().hex)
+    id: UUIDField
     skill: Skill
     parents: list[Self]
+    variable_values: TemplateVariableDict = None
 
     @property
     def inputs(self) -> typing.Iterable[SkillInputOutput]:
         seen = set()
         for input in itertools.chain(self.skill.inputs, *(parent.inputs for parent in self.parents)):
-            if input.env_variable not in seen:
+            if input.variable not in seen:
                 yield input
-            seen.add(input.env_variable)
+            seen.add(input.variable)
         return itertools.chain(self.skill.inputs, *(parent.inputs for parent in self.parents))
 
     @property
@@ -362,3 +437,22 @@ class ResolutionPlanComponent(BaseModel):
     target: Skill
     parent_tree: SkillTree | None
     code_lines: tuple[int, int]
+
+
+# Classes for communicating with
+
+class ErrorResponse(BaseModel):
+    error: str
+
+class SkillResponse(BaseModel):
+    skill_id: IDType
+    variable_values: TemplateVariableDict
+    parents: list[Self]
+
+class AgentResponse(BaseModel):
+    item_type: typing.Literal['Skill', 'Error']
+    item: SkillResponse | ErrorResponse
+
+
+
+# Built-in skills
