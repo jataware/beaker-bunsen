@@ -2,21 +2,21 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Sequence, Callable
+from typing import Any, Sequence, Callable, TYPE_CHECKING
 from typing_extensions import Self
 from zipfile import ZipFile
 
-import chromadb
-from chromadb.api import ClientAPI
-
-from ..types import Record, RecordBundle, QueryResponse, QueryResponse
+from ..types import Record, RecordBundle, QueryResponse
 from ..protocols import EmbeddingFunction
 from .base_vector_store import VectorStore
 from ..loaders.base import BaseLoader
 
+if TYPE_CHECKING:
+    from chromadb.api import ClientAPI
+
 
 class BaseChromaDBStore(VectorStore):
-    client: ClientAPI
+    client: 'ClientAPI'
     default_partition: str
 
     _chromadb_get_include = ["documents", "metadatas", "uris"]
@@ -260,6 +260,7 @@ class ChromaDBLocalStore(BaseChromaDBStore):
         default_partition: str|None = None,
         default_embedding_function: EmbeddingFunction|None = None,
     ):
+        import chromadb
         self.client = chromadb.PersistentClient(path=path)
         super().__init__(
             settings=settings,
@@ -294,6 +295,7 @@ class ChromaDBServerStore(BaseChromaDBStore):
         default_partition: str|None = None,
         default_embedding_function: EmbeddingFunction|None = None,
     ):
+        import chromadb
         self.client = chromadb.HttpClient(host=host, port=port)
         super().__init__(
             settings=settings,

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import openai
 
 from ..corpus.types import Default, DefaultType, URI
 from ..corpus.resources import Resource
@@ -71,6 +70,7 @@ def extract_examples(locations: list[str], force: bool, keep: bool):
     """
     Extract examples from Bunsen config or specified locations for use in RAG
     """
+    import openai
     total_example_count = 0
 
     dest = 'examples-unverified'

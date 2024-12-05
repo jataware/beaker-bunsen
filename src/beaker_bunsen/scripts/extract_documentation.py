@@ -10,7 +10,6 @@ from functools import reduce
 from pathlib import Path
 from urllib.parse import urlparse
 
-import openai
 
 from ..corpus.resources import Resource
 from ..corpus.loaders.schemes import unmap_scheme, read_from_uri
@@ -26,6 +25,7 @@ def extract_documentation(locations: list[str]):
     """
     Extract documentation from Bunsen config or specified locations for use in RAG
     """
+    import openai
 
     dest = 'examples-unverified'
     if not os.path.exists(dest):
